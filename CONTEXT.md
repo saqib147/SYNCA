@@ -1,0 +1,187 @@
+# Synca — Context & Active Architecture
+
+> **Living System Context Document**
+> This file contains the active state, tech stack, and endpoint registry of the Synca platform. It is automatically maintained by AI agents on every code edit as required by `.antigravity/rules.md`.
+
+---
+
+## 1. High-Level Overview
+
+**Synca** is a unified, real-time team collaboration platform that integrates project management, direct & channel messaging, file sharing, and task tracking within workspace **Rooms**.
+
+### Key System Concepts
+- **Rooms**: Organizations or workspaces where admins manage members, custom roles, permissions, and settings.
+- **Projects**: Portfolio of work items organized by Kanban boards, Gantt timelines, flat lists, and calendars.
+- **Tasks**: Hierarchical work items with subtasks, priority levels, assignees, due dates, and custom Kanban status columns. Supports personal private tasks.
+- **Messaging**: Real-time 1:1 Direct Messages (DMs) and project-scoped group channels (`#channel-name`) with rich-text (Tiptap), `@mentions`, emoji reactions, and file attachments.
+- **File Sharing**: Cloudinary-backed file attachments with file cards and signed URLs for room privacy.
+
+---
+
+## 2. Active Tech Stack
+
+| Layer | Technology / Choice | Details / Reason |
+|---|---|---|
+| **Architecture** | Monorepo (Turborepo) | Shared TypeScript types (`packages/types`), Zod schemas (`packages/zod-schemas`), apps `apps/web` & `apps/api` |
+| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS, Shadcn UI, Zustand (UI state), TanStack Query v5 (Server state), Tiptap, Recharts |
+| **Backend** | Express.js + Socket.io | Standalone Node.js Express server on Render for persistent WebSockets |
+| **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for rich tasks, channels, and milestones |
+| **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, and Socket.io multi-instance scaling |
+| **Authentication** | Clerk Auth | Email/OAuth auth, JWT session management, `@clerk/nextjs` & `@clerk/express` SDKs |
+| **File Storage** | Cloudinary | Media transform, file cards, signed private URLs |
+| **Observability** | Pino + Sentry + BetterStack | Structured JSON logging with request tracing, Sentry error monitoring |
+
+---
+
+## 3. Complete Planned API Endpoints Registry
+
+All REST API endpoints require `Authorization: Bearer <clerk_token>` header unless explicitly marked public.
+
+### 3.1 Room Management (`/api/v1/rooms`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `POST` | `/api/v1/rooms` | Create a new Room | Authenticated |
+| `GET` | `/api/v1/rooms/:roomId` | Get Room details | Room Member |
+| `PATCH` | `/api/v1/rooms/:roomId` | Update Room settings (name, avatar, desc) | `room:manage_settings` |
+| `DELETE` | `/api/v1/rooms/:roomId` | Delete Room | Room Owner |
+| `POST` | `/api/v1/rooms/:roomId/invite` | Generate unique invite code/link | `room:manage_members` |
+| `POST` | `/api/v1/rooms/join` | Join Room via invite code | Authenticated |
+| `GET` | `/api/v1/rooms/:roomId/members` | List Room members with roles | Room Member |
+| `PATCH` | `/api/v1/rooms/:roomId/members/:userId` | Update member role & custom permissions | `room:manage_members` |
+| `DELETE` | `/api/v1/rooms/:roomId/members/:userId` | Remove member from Room | `room:manage_members` |
+
+### 3.2 Projects (`/api/v1/projects`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `POST` | `/api/v1/projects` | Create a new Project in Room | `project:create` |
+| `GET` | `/api/v1/projects?roomId=` | List projects in room (filterable by status, priority, assignee) | `project:view` |
+| `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Brief, Goals, Milestones) | `project:view` |
+| `PATCH` | `/api/v1/projects/:id` | Update project metadata or privacy | `project:edit` |
+| `DELETE` | `/api/v1/projects/:id` | Soft delete project | `project:delete` |
+| `POST` | `/api/v1/projects/:id/members` | Add team member to project | `project:manage_members` |
+| `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove team member from project | `project:manage_members` |
+
+### 3.3 Tasks (`/api/v1/tasks`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | `task:create` |
+| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project | `project:view` |
+| `GET` | `/api/v1/tasks?userId=&private=true` | Get user's personal To-Do list | Authenticated (Owner only) |
+| `GET` | `/api/v1/tasks/:id` | Get task detail with subtasks | `project:view` |
+| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | `task:edit` |
+| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | `task:delete` |
+
+### 3.4 Milestones (`/api/v1/milestones`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `POST` | `/api/v1/milestones` | Create project milestone | `milestone:manage` |
+| `GET` | `/api/v1/milestones?projectId=` | List milestones for project | `project:view` |
+| `PATCH` | `/api/v1/milestones/:id` | Update milestone status / progress | `milestone:manage` |
+| `DELETE` | `/api/v1/milestones/:id` | Delete milestone | `milestone:manage` |
+
+### 3.5 Messages & Real-Time (`/api/v1/messages`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `GET` | `/api/v1/messages/dm/:userId` | Get DM message history (cursor paginated) | Authenticated |
+| `GET` | `/api/v1/messages/channel/:projectId` | Get channel message history (cursor paginated) | `chat:read` |
+| `POST` | `/api/v1/messages` | Send message (REST fallback) | `chat:send` |
+| `DELETE` | `/api/v1/messages/:id` | Soft delete message | Message Sender / Admin |
+
+### 3.6 File Storage (`/api/v1/files`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `POST` | `/api/v1/files/upload` | Upload file to Cloudinary & create FileRef | `file:upload` |
+| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Room Member |
+| `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | File Uploader / Admin |
+
+### 3.7 Notifications (`/api/v1/notifications`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `GET` | `/api/v1/notifications` | Get user notifications feed | Authenticated |
+| `PATCH` | `/api/v1/notifications/:id/read` | Mark notification as read | Authenticated |
+| `PATCH` | `/api/v1/notifications/read-all` | Mark all notifications as read | Authenticated |
+
+### 3.8 Directory & Users (`/api/v1/users`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `GET` | `/api/v1/users/:id` | Get member profile | Room Member |
+| `GET` | `/api/v1/users?roomId=` | Search/list workspace members | Room Member |
+
+### 3.9 System & Webhooks
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `GET` | `/health` | Health check endpoint (DB + Redis state) | Public |
+| `POST` | `/api/webhooks/clerk` | Clerk webhook sync (`user.created`, `user.deleted`) | Clerk Svix Signature |
+
+---
+
+## 4. WebSocket Event Registry (Socket.io)
+
+### Client → Server (`Emit`)
+- `project:join` `{ projectId }`
+- `project:leave` `{ projectId }`
+- `message:send` `{ channelType, channelId, content, attachments }`
+- `message:react` `{ messageId, emoji }`
+- `message:delete` `{ messageId }`
+- `typing:start` `{ channelType, channelId }`
+- `typing:stop` `{ channelType, channelId }`
+- `task:move` `{ taskId, newStatus, newIndex }`
+
+### Server → Client (`Listen`)
+- `message:new` `Message`
+- `message:deleted` `{ messageId, channelId }`
+- `message:reaction` `{ messageId, reactions }`
+- `typing:update` `{ channelId, typingUsers }`
+- `presence:update` `{ userId, status, lastSeen }`
+- `task:updated` `{ task, projectId }`
+- `notification:new` `Notification`
+- `error` `{ code, message }`
+
+---
+
+## 5. Workflow Protocols & Automation
+
+This repository enforces strict execution and documentation rules defined in `.antigravity/rules.md` and `.agents/rules/sync-automation.md`:
+1. **Context Awareness**: `CONTEXT.md` and `/docs/` must be consulted prior to edits.
+2. **Automated Post-Change Sync**: Every code edit, feature implementation, refactor, or route update MUST update:
+   - `CONTEXT.md` (endpoint updates, schema adjustments, architecture notes)
+   - `/docs/` files (`api.md`, `database.md`, `architecture.md`, `realtime-security.md`)
+   - `CHANGELOG.md` (logged under current date/version)
+3. **Manual Sync Command**: Responds to `sync-docs` command by comparing git diff against docs and reconciling all discrepancies.
+
+---
+
+## 6. Project Roadmap & Phase Progress
+
+| Phase | Description | Status | Progress |
+|---|---|---|---|
+| **Phase 0** | Setup & Foundation | ACTIVE | 0% |
+| **Phase 1** | Dashboard | PENDING | 0% |
+| **Phase 2** | Room Management | PENDING | 0% |
+| **Phase 3** | Projects & Tasks | PENDING | 0% |
+| **Phase 4** | Real-Time Messaging | PENDING | 0% |
+| **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
+| **Phase 6** | People & Directory | PENDING | 0% |
+| **Phase 7** | Landing Page | PENDING | 0% |
+| **Phase 8** | Polish, Testing & Deployment | PENDING | 0% |
+
+---
+
+### Active Phase Breakdown — Phase 0: Setup & Foundation (0%)
+
+- [ ] **Step 1: Monorepo & App Initialization**: Set up Turborepo monorepo layout with `apps/web` (Next.js 14, TypeScript, Tailwind CSS), `apps/api` (Express), and `packages/` (`types`, `zod-schemas`).
+- [ ] **Step 2: Component Library & Base Shell Layout**: Configure Shadcn UI and create base application layout with dark sidebar (`#1a1a1a`) and light content area (`#f4f4f5`) with navigation links (Dashboard, ToDo, Projects, Chats, Settings).
+- [ ] **Step 3: Clerk Authentication System**: Integrate Clerk auth on client (`@clerk/nextjs`) and server (`@clerk/express`) with sign-up, sign-in, protected route guards, and session persistence.
+- [ ] **Step 4: Express Server & MongoDB Connection**: Build Express backend server structure on Render, establish Mongoose MongoDB connection pooling, and set up Upstash Redis.
+- [ ] **Step 5: Cloudinary File Storage Configuration**: Configure Cloudinary SDK on Express backend for signed uploads and file metadata tracking.
+- [ ] **Step 6: Environment Configuration & Base Shell Verification**: Audit and set up environment variables across services, verify base layout, auth redirect flow, and initial server health.
+
