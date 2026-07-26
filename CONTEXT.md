@@ -164,7 +164,7 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 | Phase | Description | Status | Progress |
 |---|---|---|---|
-| **Phase 0** | Setup & Foundation | ACTIVE | 0% |
+| **Phase 0** | Setup & Foundation | ACTIVE | 17% |
 | **Phase 1** | Dashboard | PENDING | 0% |
 | **Phase 2** | Room Management | PENDING | 0% |
 | **Phase 3** | Projects & Tasks | PENDING | 0% |
@@ -176,9 +176,9 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 ---
 
-### Active Phase Breakdown — Phase 0: Setup & Foundation (0%)
+### Active Phase Breakdown — Phase 0: Setup & Foundation (17%)
 
-- [ ] **Step 1: Monorepo & App Initialization**: Set up Turborepo monorepo layout with `apps/web` (Next.js 14, TypeScript, Tailwind CSS), `apps/api` (Express), and `packages/` (`types`, `zod-schemas`).
+- [x] **Step 1: Monorepo & App Initialization**: Set up Turborepo monorepo layout with `apps/web` (Next.js 14, TypeScript, Tailwind CSS), `apps/api` (Express), and `packages/` (`types`, `zod-schemas`, `config`).
 - [ ] **Step 2: Component Library & Base Shell Layout**: Configure Shadcn UI and create base application layout with dark sidebar (`#1a1a1a`) and light content area (`#f4f4f5`) with navigation links (Dashboard, ToDo, Projects, Chats, Settings).
 - [ ] **Step 3: Clerk Authentication System**: Integrate Clerk auth on client (`@clerk/nextjs`) and server (`@clerk/express`) with sign-up, sign-in, protected route guards, and session persistence.
 - [ ] **Step 4: Express Server & MongoDB Connection**: Build Express backend server structure on Render, establish Mongoose MongoDB connection pooling, and set up Upstash Redis.
