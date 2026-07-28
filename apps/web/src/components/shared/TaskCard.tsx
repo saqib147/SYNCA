@@ -27,9 +27,9 @@ export function TaskCard({
   className,
 }: TaskCardProps) {
   const bgStyles = {
-    yellow: 'bg-[#fefdce] border-amber-200/80 shadow-sm',
-    peach: 'bg-[#ffeedb] border-orange-200/80 shadow-sm',
-    white: 'bg-white border-zinc-200/90 shadow-sm hover:shadow-md',
+    yellow: 'bg-[#fefdce] border-amber-200/80',
+    peach: 'bg-[#ffeedb] border-orange-200/80',
+    white: 'bg-white border-zinc-200/90',
   };
 
   return (
@@ -42,7 +42,7 @@ export function TaskCard({
     >
       {/* Top Row: Title + Assignee & Status Badge */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-base font-bold text-zinc-900 tracking-tight leading-snug">
+        <h3 className="text-base font-normal text-zinc-900 tracking-tight leading-snug">
           {title}
         </h3>
 
@@ -71,8 +71,17 @@ export function TaskCard({
       {/* Bottom Row: Due Date Pill & Tag Badge */}
       <div className="flex items-center justify-between pt-2">
         {/* Due Date Pill */}
-        <span className="px-3 py-1 rounded-full bg-rose-500 text-white text-xs font-bold shadow-sm flex items-center gap-1">
-          <span>Due: {dueDate}</span>
+        <span
+          className={cn(
+            'px-3 py-1 rounded-full text-xs font-bold shadow-2xs flex items-center gap-1 transition-all',
+            status === 'Completed'
+              ? 'bg-emerald-500 text-white'
+              : status === 'Overdue'
+                ? 'bg-rose-500 text-white'
+                : 'bg-zinc-100 text-zinc-700 border border-zinc-200/80'
+          )}
+        >
+          <span>{status === 'Completed' ? 'Done: ' : 'Due: '}{dueDate}</span>
         </span>
 
         {/* Tag Pill */}

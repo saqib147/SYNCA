@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
   LayoutDashboard,
-  CheckSquare,
   FolderKanban,
   ChevronRight,
   Settings,
@@ -24,7 +23,6 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'ToDo List', href: '/todo', icon: CheckSquare },
   { name: 'All Projects', href: '/projects', icon: FolderKanban },
 ];
 
