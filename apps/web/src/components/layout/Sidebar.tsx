@@ -14,6 +14,7 @@ import {
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUser, useClerk } from '@clerk/nextjs';
 
 interface NavItem {
   name: string;
@@ -47,6 +48,8 @@ const sampleMembers = [
 export function Sidebar() {
   const pathname = usePathname();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
 
   return (
     <aside className="w-64 bg-[#16191e] rounded-3xl p-4 text-white flex flex-col justify-between h-[calc(100vh-2rem)] sticky top-4 shadow-xl border border-zinc-800/50 select-none">
@@ -55,16 +58,37 @@ export function Sidebar() {
         
         {/* User Profile Header */}
         <div className="flex items-center gap-3 p-2 rounded-2xl bg-[#1e232b] border border-zinc-800/80">
-          <div className="relative w-10 h-10 rounded-full bg-amber-200 border-2 border-amber-400 overflow-hidden flex items-center justify-center text-zinc-900 font-bold text-sm">
-            FA
-          </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold truncate text-zinc-100">Fazeel Ahmad</h4>
-            <p className="text-xs text-zinc-400 truncate">UI UX Designer</p>
-          </div>
-          <button className="text-zinc-400 hover:text-white transition-colors">
-            <ChevronDown className="w-4 h-4" />
-          </button>
+          {isLoaded && user ? (
+            <>
+              {user.imageUrl ? (
+                <img
+                  src={user.imageUrl}
+                  alt={user.fullName || 'User avatar'}
+                  className="w-10 h-10 rounded-full border-2 border-[#d8f870] object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-[#d8f870] text-zinc-900 font-bold text-sm flex items-center justify-center">
+                  {user.firstName?.charAt(0) || user.emailAddresses[0]?.emailAddress?.charAt(0)?.toUpperCase() || 'U'}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold truncate text-zinc-100">
+                  {user.fullName || user.username || 'Synca User'}
+                </h4>
+                <p className="text-xs text-zinc-400 truncate">
+                  {user.primaryEmailAddress?.emailAddress || 'Workspace Member'}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3 bg-zinc-800 rounded animate-pulse w-3/4" />
+                <div className="h-2 bg-zinc-800 rounded animate-pulse w-1/2" />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Primary Navigation */}
@@ -187,7 +211,10 @@ export function Sidebar() {
           <Settings className="w-4 h-4 text-zinc-400" />
           <span>Settings</span>
         </Link>
-        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors">
+        <button
+          onClick={() => signOut()}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors"
+        >
           <LogOut className="w-4 h-4" />
           <span>Sign out</span>
         </button>

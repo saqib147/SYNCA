@@ -12,7 +12,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audited and synchronized workspace documentation.
 - Reconciled `CONTEXT.md`, `CHANGELOG.md`, and design specifications under `docs/design-system.md` following Phase 0 Step 2 layout updates.
 
+### Fixed
+- Fixed Express backend ESM hoisting issue where server initialization imported database and Redis clients before `dotenv` was fully loaded, resulting in `REDIS_URL` missing errors. Introduced `loadEnv.ts` loaded at the absolute top of the index entrypoint.
+
 ### Added
+- Completed **Phase 0 — Step 5: Cloudinary File Storage Configuration**:
+  - Installed `cloudinary` and `multer` file upload packages (along with `@types/multer` typing support).
+  - Defined Mongoose `FileRef` database schema in `apps/api/src/models/FileRef.ts` with standard parameters (`uploaderId`, `roomId`, `cloudinaryPublicId`, `cloudinaryUrl`, `fileName`, `fileSize`, `fileType`, `uploadedAt`), query middleware soft-delete exclusions, and compound indexing.
+  - Implemented Cloudinary v2 SDK configuration and upload buffer stream helper in `apps/api/src/lib/cloudinary.ts`.
+  - Built `POST /api/v1/files/upload` route in `apps/api/src/routes/file.routes.ts` utilizing `multer` in-memory storage, validating parameter shapes, limiting file sizes to **25 MB**, and validating permitted MIME types.
+  - Registered file upload router in `apps/api/src/app.ts` under `/api/v1/files`.
+- Completed **Phase 0 — Step 4: Express Server & MongoDB Connection**:
+  - Installed `mongoose` and `redis` client packages in `apps/api`.
+  - Implemented MongoDB Atlas connection pooling in `apps/api/src/lib/mongodb.ts` with connection events monitoring and graceful shutdown handling.
+  - Implemented Upstash Redis client connection setup in `apps/api/src/lib/redis.ts` supporting SSL/TLS connection strings.
+  - Refactored `apps/api/src/app.ts`'s `/health` endpoint to query and return real-time statuses of MongoDB Atlas and Upstash Redis connections (pings).
+  - Updated server start routine in `apps/api/src/index.ts` to await MongoDB and Redis connections successfully before launching the Express listener.
+- Completed **Phase 0 — Step 3: Clerk Authentication System**:
+  - Integrated Clerk Authentication in Next.js client (`@clerk/nextjs@^5`) and Express backend (`@clerk/express`).
+  - Implemented Next.js edge authentication middleware (`apps/web/src/middleware.ts`) protecting all app routes and keeping `/sign-in` and `/sign-up` public.
+  - Created customized `/sign-in` and `/sign-up` routes matching the dark theme design system.
+  - Updated `Sidebar.tsx` user profile layout to dynamically load logged-in user profile image/details and wired up the sign-out trigger.
+  - Implemented reusable backend authentication middleware (`requireAuth`) enforcing the standard JSON error envelope (`401 UNAUTHORIZED`).
+  - Mounted global Clerk middleware in Express server and added `/api/v1/protected-test` endpoint for authentication validation.
 - Project Roadmap & Phase Progress tracking table in `CONTEXT.md` (Phases 0 through 8).
 - Atomic 6-step breakdown checklist for Phase 0: Setup & Foundation.
 - Completed **Phase 0 — Step 1: Monorepo & App Initialization**:

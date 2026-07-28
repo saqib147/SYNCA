@@ -164,7 +164,7 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 | Phase | Description | Status | Progress |
 |---|---|---|---|
-| **Phase 0** | Setup & Foundation | ACTIVE | 33% |
+| **Phase 0** | Setup & Foundation | ACTIVE | 83% |
 | **Phase 1** | Dashboard | PENDING | 0% |
 | **Phase 2** | Room Management | PENDING | 0% |
 | **Phase 3** | Projects & Tasks | PENDING | 0% |
@@ -176,12 +176,12 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 ---
 
-### Active Phase Breakdown — Phase 0: Setup & Foundation (33%)
+### Active Phase Breakdown — Phase 0: Setup & Foundation (83%)
 
 - [x] **Step 1: Monorepo & App Initialization**: Set up Turborepo monorepo layout with `apps/web` (Next.js 14, TypeScript, Tailwind CSS), `apps/api` (Express), and `packages/` (`types`, `zod-schemas`, `config`).
 - [x] **Step 2: Component Library & Base Shell Layout**: Configure Shadcn UI and create base application layout with dark sidebar (`#16191e`), top bar, and route views matching `/design/` Figma mockups (`/dashboard`, `/todo`, `/projects`, `/chats`, `/settings`).
-- [ ] **Step 3: Clerk Authentication System**: Integrate Clerk auth on client (`@clerk/nextjs`) and server (`@clerk/express`) with sign-up, sign-in, protected route guards, and session persistence.
-- [ ] **Step 4: Express Server & MongoDB Connection**: Build Express backend server structure on Render, establish Mongoose MongoDB connection pooling, and set up Upstash Redis.
-- [ ] **Step 5: Cloudinary File Storage Configuration**: Configure Cloudinary SDK on Express backend for signed uploads and file metadata tracking.
+- [x] **Step 3: Clerk Authentication System**: Integrate Clerk auth on client (`@clerk/nextjs`) and server (`@clerk/express`) with sign-up, sign-in, protected route guards, and session persistence.
+- [x] **Step 4: Express Server & MongoDB Connection**: Build Express backend server structure on Render, establish Mongoose MongoDB connection pooling, and set up Upstash Redis.
+- [x] **Step 5: Cloudinary File Storage Configuration**: Configure Cloudinary SDK on Express backend for signed uploads and file metadata tracking.
 - [ ] **Step 6: Environment Configuration & Base Shell Verification**: Audit and set up environment variables across services, verify base layout, auth redirect flow, and initial server health.
 
