@@ -5,6 +5,15 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Phase 2 - Workspace Management] - 2026-07-28
+
+### Added
+- Completed **Phase 2 — Step 1: Database Model & Zod Schemas**:
+  - Created shared TypeScript interfaces (`Workspace`, `WorkspaceMember`, `WorkspaceRole`) in `packages/types/src/workspace.types.ts`.
+  - Created Zod validation schemas (`createWorkspaceSchema`, `joinWorkspaceSchema`, `updateWorkspaceSchema`) in `packages/zod-schemas/src/workspace.schema.ts`.
+  - Defined Mongoose `Workspace` model in `apps/api/src/models/Workspace.ts` with compound indexes on `joinCode`, `slug`, `ownerId`, and `members.userId`.
+  - Documented `Workspace` collection specification in `docs/database.md`.
+
 ## [Phase 1 - Dashboard] - 2026-07-28
 
 ### Added

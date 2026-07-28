@@ -165,8 +165,8 @@ This repository enforces strict execution and documentation rules defined in `.a
 | Phase | Description | Status | Progress |
 |---|---|---|---|
 | **Phase 0** | Setup & Foundation | Completed | 100% |
-| **Phase 1** | Dashboard | ACTIVE | 83% |
-| **Phase 2** | Room Management | PENDING | 0% |
+| **Phase 1** | Dashboard | Completed | 100% |
+| **Phase 2** | Workspace Management | ACTIVE | 0% |
 | **Phase 3** | Projects & Tasks | PENDING | 0% |
 | **Phase 4** | Real-Time Messaging | PENDING | 0% |
 | **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
@@ -195,3 +195,14 @@ This repository enforces strict execution and documentation rules defined in `.a
 - [x] **Step 4: Analytics Completed Projects Chart**: Integrate Recharts/Calendar Grid to render the weekly completed tasks contribution heat map using theme gradients.
 - [x] **Step 5: Ongoing Projects & Recent Chats Widgets**: Build the ongoing projects quick-list and recent chats activity panel with unread badge count indicators.
 - [x] **Step 6: Route Simplification**: Removed ToDo tab per user specification, maintaining Dashboard and Projects core views.
+
+---
+
+### Active Phase Breakdown — Phase 2: Workspace Management (17%)
+
+- [x] **Step 1: Database Model & Zod Schemas**: Define Mongoose `Workspace` schema, Zod validation schemas, and TypeScript interfaces for workspace objects, member rosters, and join codes.
+- [ ] **Step 2: Workspace API Endpoints**: Implement Express workspace routes (`POST /api/v1/workspaces`, `GET /api/v1/workspaces`, `POST /api/v1/workspaces/join`, `DELETE /api/v1/workspaces/:id/members/:userId`).
+- [ ] **Step 3: Workspace Context & Hook**: Build `WorkspaceContext` and `useWorkspace()` hook in `apps/web` with state management for active workspace and workspace switching.
+- [ ] **Step 4: Workspace Selector & Switcher in Sidebar**: Add interactive workspace switcher dropdown to sidebar with active workspace indicators and quick-action triggers.
+- [ ] **Step 5: Create & Join Workspace Modals**: Build accessible dialog modals for creating new workspaces and joining existing workspaces via 6-character alphanumeric codes.
+- [ ] **Step 6: Dedicated Workspace Overview Page**: Build the `/workspaces/[id]` route featuring member roster, invite code copy buttons, and workspace settings.

@@ -31,17 +31,25 @@ Mirrors Clerk identity data synced via webhooks (`user.created`, `user.deleted`)
 }
 ```
 
-### 2.2 `Room` Collection
-Represents workspace organizations.
+### 2.2 `Workspace` Collection
+Represents collaborative workspace organizations containing team members, shared channels, and projects.
 
 ```typescript
 {
   _id: ObjectId,
   name: String,          // Workspace name (e.g. "Acme Corp")
-  avatarUrl: String,
+  slug: String,          // Unique URL slug (e.g. "acme-corp")
   description: String,
-  ownerId: String,       // Refers to User._id
-  inviteCode: String,    // Unique indexed string for invite links
+  joinCode: String,      // Unique 6-character alphanumeric code (e.g. "WORK-89")
+  ownerId: String,       // Refers to User._id (Clerk ID)
+  members: [
+    {
+      userId: String,    // Refers to User._id
+      role: String,      // 'owner' | 'admin' | 'member'
+      joinedAt: Date
+    }
+  ],
+  isPrivate: Boolean,    // Default false
   createdAt: Date,
   updatedAt: Date
 }

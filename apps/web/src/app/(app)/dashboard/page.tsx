@@ -26,11 +26,59 @@ const completedTasks = [
 ];
 
 const ongoingProjects = [
-  { name: 'Develop API Endpoints', dueDate: '26 Nov, 2024', color: 'text-amber-600 bg-amber-50/50 border-amber-200/50', barColor: 'bg-amber-500', progress: 75 },
-  { name: 'Onboarding Flow', dueDate: '26 Nov, 2024', color: 'text-emerald-600 bg-emerald-50/50 border-emerald-200/50', barColor: 'bg-emerald-500', progress: 40 },
-  { name: 'Build Dashboard', dueDate: '26 Nov, 2024', color: 'text-blue-600 bg-blue-50/50 border-blue-200/50', barColor: 'bg-blue-500', progress: 90 },
-  { name: 'Optimize Page Load', dueDate: '26 Nov, 2024', color: 'text-cyan-600 bg-cyan-50/50 border-cyan-200/50', barColor: 'bg-cyan-500', progress: 15 },
-  { name: 'Cross-Browser Testing', dueDate: '26 Nov, 2024', color: 'text-teal-600 bg-teal-50/50 border-teal-200/50', barColor: 'bg-teal-500', progress: 60 },
+  {
+    name: 'Develop API Endpoints',
+    dueDate: '26 Nov, 2024',
+    icon: (
+      <svg className="w-8 h-8 flex-shrink-0 text-[#fca5a5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Onboarding Flow',
+    dueDate: '26 Nov, 2024',
+    icon: (
+      <svg className="w-8 h-8 flex-shrink-0 text-[#854d0e]" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C12 7.52 7.52 12 2 12c5.52 0 10 4.48 10 10 0-5.52 4.48-10 10-10-5.52 0-10-4.48-10-10z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Build Dashboard',
+    dueDate: '26 Nov, 2024',
+    icon: (
+      <svg className="w-8 h-8 flex-shrink-0 text-[#2563eb]" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M4 18h6L16 6H10L4 18zM10 18h6l6-12h-6l-6 12z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Optimize Page Load',
+    dueDate: '26 Nov, 2024',
+    icon: (
+      <svg className="w-8 h-8 flex-shrink-0 text-[#0284c7]" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-4a6 6 0 1 0 0-12 6 6 0 0 0 0 12z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Cross-Browser Testing',
+    dueDate: '26 Nov, 2024',
+    icon: (
+      <svg className="w-8 h-8 flex-shrink-0 text-[#0d9488]" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="6" cy="6" r="2.2" />
+        <circle cx="12" cy="6" r="2.2" />
+        <circle cx="18" cy="6" r="2.2" />
+        <circle cx="6" cy="12" r="2.2" />
+        <circle cx="12" cy="12" r="2.2" />
+        <circle cx="18" cy="12" r="2.2" />
+        <circle cx="6" cy="18" r="2.2" />
+        <circle cx="12" cy="18" r="2.2" />
+        <circle cx="18" cy="18" r="2.2" />
+      </svg>
+    ),
+  },
 ];
 
 const recentChats = [
@@ -119,7 +167,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Active Projects Card */}
-          <div className="bg-zinc-50   rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-blue-200 transition-all duration-300 group">
+          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-blue-200 transition-all duration-300 group">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-blue-100/70">
               <FolderGit2 className="w-5 h-5 transition-transform group-hover:scale-110" />
             </div>
@@ -130,7 +178,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Team Velocity Card */}
-          <div className="bg-zinc-50   rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-amber-200 transition-all duration-300 group">
+          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-amber-200 transition-all duration-300 group">
             <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-amber-100/70">
               <Zap className="w-5 h-5 animate-pulse transition-transform group-hover:scale-110" />
             </div>
@@ -146,7 +194,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Left Column: Task Status */}
-        <div className="bg-white rounded-3xl p-5  /80 space-y-4 flex flex-col">
+        <div className="bg-white rounded-3xl p-5 border border-zinc-200/80 space-y-4 flex flex-col max-h-[780px]">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-normal text-zinc-900">Task Status</h2>
             <div className="flex items-center bg-zinc-100 p-1 rounded-full text-xs font-medium text-zinc-500">
@@ -166,7 +214,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Render Pixel-Matched Task Cards */}
-          <div className="space-y-3.5 flex-1 overflow-y-auto max-h-[520px] pr-1">
+          <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 scrollbar-none">
             {(activeTab === 'Upcoming'
               ? upcomingTasks
               : activeTab === 'Overdue'
@@ -189,7 +237,7 @@ export default function DashboardPage() {
         {/* Middle Column: Charts & Private Tasks */}
         <div className="space-y-6 flex flex-col">
           {/* Completed Tasks Vertical Pill Strips */}
-          <div className="bg-white rounded-3xl p-6  /80 flex flex-col justify-between hover:border-zinc-300/80 transition-all duration-300 min-h-[380px]">
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 flex flex-col justify-between hover:border-zinc-300/80 transition-all duration-300 min-h-[380px]">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-2xl font-normal text-zinc-900 tracking-tight">Completed Tasks</h2>
@@ -225,7 +273,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Private Task Placeholder */}
-          <div className="bg-white rounded-3xl p-6  /80 flex flex-col items-center justify-center text-center space-y-2 min-h-[160px]">
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 flex flex-col items-center justify-center text-center space-y-2 min-h-[160px]">
             <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
               <Plus className="w-5 h-5" />
             </div>
@@ -237,31 +285,21 @@ export default function DashboardPage() {
         {/* Right Column: Ongoing Projects & Recent Chats */}
         <div className="space-y-6 flex flex-col">
           {/* Ongoing Projects */}
-          <div className="bg-white rounded-3xl p-5  /80 space-y-4 hover:border-zinc-300/80 transition-all duration-300">
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 space-y-5 hover:border-zinc-300/80 transition-all duration-300">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-normal text-zinc-900">Ongoing Projects</h2>
-
+              <h2 className="text-lg font-normal text-zinc-900 font-funnel">Ongoing Projects</h2>
+              <button className="text-xs font-normal text-zinc-800 border border-zinc-300/90 px-3 py-1 rounded-full hover:bg-zinc-50 transition-colors flex items-center gap-1">
+                New <ArrowUpRight className="w-3 h-3" />
+              </button>
             </div>
 
             <div className="space-y-4">
               {ongoingProjects.map((proj) => (
-                <div key={proj.name} className="flex flex-col gap-2 p-2 rounded-2xl hover:bg-zinc-50/80 transition-all cursor-pointer hover:scale-[1.01]">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-xl border ${proj.color} flex items-center justify-center font-bold text-sm`}>
-                      ❖
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-normal text-zinc-900 truncate">{proj.name}</h4>
-                      <p className="text-[10px] text-zinc-400 font-medium">Due Date, {proj.dueDate}</p>
-                    </div>
-                    <span className="text-xs font-extrabold text-zinc-600">{proj.progress}%</span>
-                  </div>
-                  {/* Progress Line */}
-                  <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${proj.barColor} rounded-full transition-all duration-500`}
-                      style={{ width: `${proj.progress}%` }}
-                    />
+                <div key={proj.name} className="flex items-center gap-4 py-0.5 cursor-pointer group">
+                  {proj.icon}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-base font-normal text-zinc-900 truncate font-funnel group-hover:text-zinc-700 transition-colors">{proj.name}</h4>
+                    <p className="text-xs text-zinc-400 font-normal font-sans">Due Date, {proj.dueDate}</p>
                   </div>
                 </div>
               ))}
@@ -269,7 +307,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Chats */}
-          <div className="bg-white rounded-3xl p-5  /80 space-y-4 flex-1 hover:border-zinc-300/80 transition-all duration-300">
+          <div className="bg-white rounded-3xl p-5 border border-zinc-200/80 space-y-4 flex-1 hover:border-zinc-300/80 transition-all duration-300">
             <h2 className="text-lg font-normal text-zinc-900">Recent Chats</h2>
             <div className="space-y-3">
               {recentChats.map((chat) => (
