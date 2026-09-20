@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
+import { WorkspaceProvider } from '@/context/WorkspaceContext';
 
 export default function AppLayout({
   children,
@@ -7,17 +8,20 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#f4f4f5] p-4 gap-6">
-      {/* Dark Sidebar */}
-      <Sidebar />
+    <WorkspaceProvider>
+      <div className="flex min-h-screen bg-[#f4f4f5] p-4 gap-6">
+        {/* Dark Sidebar */}
+        <Sidebar />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* <TopBar /> */}
-        <main className="flex-1 p-6 overflow-y-auto">
-          {children}
-        </main>
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* <TopBar /> */}
+          <main className="flex-1 p-6 overflow-y-auto">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </WorkspaceProvider>
   );
 }
+

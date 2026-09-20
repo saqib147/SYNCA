@@ -66,52 +66,59 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 
 ## 2. REST API Endpoint Specifications
 
-### 2.1 Room Management (`/api/v1/rooms`)
+### 2.1 Workspace Management (`/api/v1/workspaces`)
 
-#### `POST /api/v1/rooms`
-- **Description**: Create a new workspace Room.
+#### `POST /api/v1/workspaces`
+- **Description**: Create a new workspace. The authenticated creator is automatically set as `ownerId` and assigned the `'owner'` role in `members`.
 - **Request Body**:
   ```json
   {
     "name": "Acme Engineering",
-    "description": "Primary workspace for engineering team",
-    "avatarUrl": "https://res.cloudinary.com/..."
+    "slug": "acme-eng", // optional; auto-generated if omitted
+    "description": "Primary workspace for engineering team", // optional
+    "isPrivate": false // optional, defaults to false
   }
   ```
-- **Response `201`**: Returns created `Room` document. The creator is automatically added as `Owner`.
+- **Response `201`**: Returns created `Workspace` object including auto-generated 6-character uppercase `joinCode`.
 
-#### `GET /api/v1/rooms/:roomId`
-- **Description**: Get workspace Room details.
-- **Response `200`**: `Room` object including member counts and workspace metadata.
+#### `GET /api/v1/workspaces`
+- **Description**: List all workspaces the authenticated user is a member of, sorted by most recently updated.
+- **Response `200`**: Array of `Workspace` objects.
 
-#### `PATCH /api/v1/rooms/:roomId`
-- **Description**: Update Room name, avatar, or description.
-- **Permission**: `room:manage_settings`
+#### `GET /api/v1/workspaces/:id`
+- **Description**: Get single workspace details by MongoDB `_id` or `slug`. If `isPrivate: true`, non-members receive `403 FORBIDDEN`.
+- **Response `200`**: `Workspace` object with member roster.
 
-#### `DELETE /api/v1/rooms/:roomId`
-- **Description**: Delete workspace Room.
-- **Permission**: Owner role required.
-
-#### `POST /api/v1/rooms/:roomId/invite`
-- **Description**: Generate a unique invite code/link.
-- **Permission**: `room:manage_members`
-- **Response `200`**:
+#### `POST /api/v1/workspaces/join`
+- **Description**: Join a workspace using a 6-character alphanumeric join code.
+- **Request Body**:
   ```json
   {
-    "success": true,
-    "data": {
-      "inviteCode": "SYNCA-7892-XYZ",
-      "inviteUrl": "https://synca.io/invite/SYNCA-7892-XYZ"
-    }
+    "joinCode": "SQ5KBF"
   }
   ```
+- **Response `200`**: `Workspace` object with updated member roster.
+- **Errors**: `404 NOT_FOUND` for invalid code; `409 CONFLICT` if already a member.
 
-#### `POST /api/v1/rooms/join`
-- **Description**: Join workspace using an invite code.
-- **Request Body**: `{ "inviteCode": "SYNCA-7892-XYZ" }`
+#### `PATCH /api/v1/workspaces/:id`
+- **Description**: Update workspace settings (name, description, isPrivate). Requires `'owner'` or `'admin'` role.
+- **Request Body**:
+  ```json
+  {
+    "name": "Acme Core Team",
+    "description": "Updated team description",
+    "isPrivate": true
+  }
+  ```
+- **Response `200`**: Updated `Workspace` object.
 
-#### `GET /api/v1/rooms/:roomId/members`
-- **Description**: Get list of members in room with their roles and titles.
+#### `DELETE /api/v1/workspaces/:id/members/:userId`
+- **Description**: Remove a member from the workspace, or allow a member to leave voluntarily (`requesterId === targetUserId`). Owners cannot be removed or leave without transferring ownership.
+- **Response `200`**: Updated `Workspace` object and confirmation message.
+
+#### `DELETE /api/v1/workspaces/:id`
+- **Description**: Delete workspace. Only the workspace `ownerId` can perform this operation.
+- **Response `200`**: Confirmation message and deleted workspace ID.
 
 #### `PATCH /api/v1/rooms/:roomId/members/:userId`
 - **Description**: Update a member's role or custom permission overrides.

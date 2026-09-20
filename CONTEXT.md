@@ -37,19 +37,17 @@
 
 All REST API endpoints require `Authorization: Bearer <clerk_token>` header unless explicitly marked public.
 
-### 3.1 Room Management (`/api/v1/rooms`)
+### 3.1 Workspace Management (`/api/v1/workspaces`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/rooms` | Create a new Room | Authenticated |
-| `GET` | `/api/v1/rooms/:roomId` | Get Room details | Room Member |
-| `PATCH` | `/api/v1/rooms/:roomId` | Update Room settings (name, avatar, desc) | `room:manage_settings` |
-| `DELETE` | `/api/v1/rooms/:roomId` | Delete Room | Room Owner |
-| `POST` | `/api/v1/rooms/:roomId/invite` | Generate unique invite code/link | `room:manage_members` |
-| `POST` | `/api/v1/rooms/join` | Join Room via invite code | Authenticated |
-| `GET` | `/api/v1/rooms/:roomId/members` | List Room members with roles | Room Member |
-| `PATCH` | `/api/v1/rooms/:roomId/members/:userId` | Update member role & custom permissions | `room:manage_members` |
-| `DELETE` | `/api/v1/rooms/:roomId/members/:userId` | Remove member from Room | `room:manage_members` |
+| `POST` | `/api/v1/workspaces` | Create a new Workspace (creator becomes Owner) | Authenticated |
+| `GET` | `/api/v1/workspaces` | List all workspaces user is a member of | Authenticated |
+| `GET` | `/api/v1/workspaces/:id` | Get Workspace details by ID or slug | Workspace Member |
+| `POST` | `/api/v1/workspaces/join` | Join Workspace via 6-character join code | Authenticated |
+| `PATCH` | `/api/v1/workspaces/:id` | Update Workspace settings (name, desc, isPrivate) | Owner / Admin |
+| `DELETE` | `/api/v1/workspaces/:id/members/:userId` | Remove member or leave workspace | Owner / Admin or Self |
+| `DELETE` | `/api/v1/workspaces/:id` | Delete Workspace | Workspace Owner |
 
 ### 3.2 Projects (`/api/v1/projects`)
 
@@ -166,7 +164,7 @@ This repository enforces strict execution and documentation rules defined in `.a
 |---|---|---|---|
 | **Phase 0** | Setup & Foundation | Completed | 100% |
 | **Phase 1** | Dashboard | Completed | 100% |
-| **Phase 2** | Workspace Management | ACTIVE | 0% |
+| **Phase 2** | Workspace Management | Completed | 100% |
 | **Phase 3** | Projects & Tasks | PENDING | 0% |
 | **Phase 4** | Real-Time Messaging | PENDING | 0% |
 | **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
@@ -198,11 +196,11 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 ---
 
-### Active Phase Breakdown — Phase 2: Workspace Management (17%)
+### Active Phase Breakdown — Phase 2: Workspace Management (100%)
 
 - [x] **Step 1: Database Model & Zod Schemas**: Define Mongoose `Workspace` schema, Zod validation schemas, and TypeScript interfaces for workspace objects, member rosters, and join codes.
-- [ ] **Step 2: Workspace API Endpoints**: Implement Express workspace routes (`POST /api/v1/workspaces`, `GET /api/v1/workspaces`, `POST /api/v1/workspaces/join`, `DELETE /api/v1/workspaces/:id/members/:userId`).
-- [ ] **Step 3: Workspace Context & Hook**: Build `WorkspaceContext` and `useWorkspace()` hook in `apps/web` with state management for active workspace and workspace switching.
-- [ ] **Step 4: Workspace Selector & Switcher in Sidebar**: Add interactive workspace switcher dropdown to sidebar with active workspace indicators and quick-action triggers.
-- [ ] **Step 5: Create & Join Workspace Modals**: Build accessible dialog modals for creating new workspaces and joining existing workspaces via 6-character alphanumeric codes.
-- [ ] **Step 6: Dedicated Workspace Overview Page**: Build the `/workspaces/[id]` route featuring member roster, invite code copy buttons, and workspace settings.
+- [x] **Step 2: Workspace API Endpoints**: Implement Express workspace routes (`POST /api/v1/workspaces`, `GET /api/v1/workspaces`, `POST /api/v1/workspaces/join`, `DELETE /api/v1/workspaces/:id/members/:userId`).
+- [x] **Step 3: Workspace Context & Hook**: Build `WorkspaceContext` and `useWorkspace()` hook in `apps/web` with state management for active workspace and workspace switching.
+- [x] **Step 4: Workspace Selector & Switcher in Sidebar**: Add interactive workspace switcher dropdown to sidebar with active workspace indicators and quick-action triggers.
+- [x] **Step 5: Create & Join Workspace Modals**: Build accessible dialog modals for creating new workspaces and joining existing workspaces via 6-character alphanumeric codes.
+- [x] **Step 6: Dedicated Workspace Overview Page**: Build the `/workspaces/[id]` route featuring member roster, invite code copy buttons, and workspace settings.

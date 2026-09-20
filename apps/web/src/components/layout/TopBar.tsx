@@ -1,8 +1,12 @@
 'use client';
 
 import { Search, Bell, Share2, User } from 'lucide-react';
+import { useWorkspace } from '@/hooks/useWorkspace';
+import { cn } from '@/lib/utils';
 
 export function TopBar() {
+  const { activeWorkspace, isLoading } = useWorkspace();
+
   return (
     <header className="h-16 w-full flex items-center justify-between px-6 bg-transparent">
       {/* Search Input */}
@@ -19,8 +23,19 @@ export function TopBar() {
       <div className="flex items-center gap-4">
         {/* Workspace Badge */}
         <div className="px-3 py-1 rounded-full bg-white border border-zinc-200 text-xs font-semibold text-zinc-700 shadow-sm flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Acme Workspace</span>
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full',
+              activeWorkspace ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'
+            )}
+          />
+          <span className="max-w-[150px] truncate">
+            {isLoading
+              ? 'Loading...'
+              : activeWorkspace
+              ? activeWorkspace.name
+              : 'No Workspace'}
+          </span>
         </div>
 
         {/* Notification Bell */}

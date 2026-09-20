@@ -8,11 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Phase 2 - Workspace Management] - 2026-07-28
 
 ### Added
+- Completed **Phase 2 — Step 6: Dedicated Workspace Overview Page & Phase 2 Milestone**:
+  - Implemented the dedicated `/workspaces/[id]` route (`apps/web/src/app/(app)/workspaces/[id]/page.tsx`) with dynamic ID/slug resolution, breadcrumb navigation, and responsive header banner.
+  - Built an interactive **Invite Code Widget** with one-click clipboard copying (`navigator.clipboard.writeText`) and animated checkmark feedback.
+  - Built the **Members & Team Roster** tab featuring member search filtering, role indicators (`Owner`, `Admin`, `Member`), joined dates, and admin member removal controls.
+  - Built the **Workspace Settings** tab allowing workspace admins/owners to update name, description, and toggle privacy (Public vs. Private) with live feedback.
+  - Built the **Danger Zone** with role-gated Leave Workspace (non-owners) and Delete Workspace (owners) workflows featuring safety confirmation states.
+  - Phase 2 (Workspace Management) is **100% Complete**!
+- Completed **Phase 2 — Step 5: Create & Join Workspace Modals**:
+  - Implemented `CreateWorkspaceModal` (`apps/web/src/components/workspace/CreateWorkspaceModal.tsx`) with client-side Zod validation (`createWorkspaceSchema`), workspace name, description, privacy toggle (Public vs. Private), loading spinner, and error state handling.
+  - Implemented `JoinWorkspaceModal` (`apps/web/src/components/workspace/JoinWorkspaceModal.tsx`) featuring a 6-character monospace invite code input, automatic uppercase filtering, Zod schema validation, and immediate workspace activation on join.
+- Completed **Phase 2 — Step 4: Workspace Selector & Switcher in Sidebar**:
+  - Created `WorkspaceSwitcher` (`apps/web/src/components/workspace/WorkspaceSwitcher.tsx`) integrated directly into the floating sidebar, displaying the active workspace name, avatar badge, user role, and member count.
+  - Built an accessible dropdown popover with click-outside detection and Escape key closing, workspace listing with active checkmark indicators, and quick action buttons for "Create Workspace", "Join with Code", and "Manage Workspace".
+  - Updated `Sidebar.tsx` to mount the `WorkspaceSwitcher` prominently beneath the user profile.
+  - Updated `TopBar.tsx` to dynamically display the active workspace name from the `useWorkspace` hook.
+- Completed **Phase 2 — Step 3: Workspace Context & Hook**:
+  - Implemented typed client API services in `apps/web/src/lib/api/workspace.api.ts` wrapping all `/api/v1/workspaces` endpoints with Clerk bearer token authentication and standard error handling.
+  - Built `WorkspaceContext` & `WorkspaceProvider` in `apps/web/src/context/WorkspaceContext.tsx` providing centralized workspace state, active workspace selection, persistent caching (`synca_active_workspace_id`), and role derivation (`userRole`, `isOwner`, `isAdmin`).
+  - Created custom `useWorkspace()` hook in `apps/web/src/hooks/useWorkspace.ts` with context validation guard.
+  - Integrated `<WorkspaceProvider>` into `apps/web/src/app/(app)/layout.tsx` to provide workspace state across all app views.
+  - Added `NEXT_PUBLIC_API_URL` configuration to `apps/web/.env.local`.
+- Completed **Phase 2 — Step 2: Workspace API Endpoints**:
+  - Implemented `apps/api/src/utils/workspace-helpers.ts` for cryptographically secure 6-character uppercase join code generation (`generateJoinCode`) and URL slug generation (`slugify`).
+  - Implemented `apps/api/src/controllers/workspace.controller.ts` handling workspace CRUD, join code verification, member authorization, and role protection.
+  - Created `apps/api/src/routes/workspace.routes.ts` with Clerk session authentication (`requireAuth`) on all routes.
+  - Mounted workspace router at `/api/v1/workspaces` in `apps/api/src/app.ts`.
+  - Documented all endpoint schemas and error codes in `docs/api.md` and updated `CONTEXT.md`.
 - Completed **Phase 2 — Step 1: Database Model & Zod Schemas**:
   - Created shared TypeScript interfaces (`Workspace`, `WorkspaceMember`, `WorkspaceRole`) in `packages/types/src/workspace.types.ts`.
   - Created Zod validation schemas (`createWorkspaceSchema`, `joinWorkspaceSchema`, `updateWorkspaceSchema`) in `packages/zod-schemas/src/workspace.schema.ts`.
   - Defined Mongoose `Workspace` model in `apps/api/src/models/Workspace.ts` with compound indexes on `joinCode`, `slug`, `ownerId`, and `members.userId`.
   - Documented `Workspace` collection specification in `docs/database.md`.
+
+### Fixed
+- Fixed Upstash Redis connection loop error (`SocketClosedUnexpectedlyError`) by upgrading `REDIS_URL` in `apps/api/.env.local` from unencrypted `redis://` to TLS-encrypted `rediss://`.
+- Enhanced `apps/api/src/loadEnv.ts` with absolute path directory resolution and `override: true` to ensure local development environment overrides are correctly applied.
+- Verified live server `/health` returns status `200 OK` with both MongoDB and Redis `connected`.
 
 ## [Phase 1 - Dashboard] - 2026-07-28
 

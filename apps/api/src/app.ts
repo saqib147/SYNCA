@@ -6,6 +6,7 @@ import { clerkMiddleware } from '@clerk/express';
 import { requireAuth } from './middleware/auth.middleware.js';
 import { redisClient } from './lib/redis.js';
 import fileRouter from './routes/file.routes.js';
+import workspaceRouter from './routes/workspace.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -17,6 +18,7 @@ export const createApp = () => {
 
   // Register API routers
   app.use('/api/v1/files', fileRouter);
+  app.use('/api/v1/workspaces', workspaceRouter);
 
   app.get('/health', async (_req, res) => {
     const dbState = mongoose.connection.readyState;

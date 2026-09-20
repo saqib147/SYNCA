@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser, useClerk } from '@clerk/nextjs';
+import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
 
 interface NavItem {
   name: string;
@@ -88,6 +89,9 @@ export function Sidebar() {
             </>
           )}
         </div>
+
+        {/* Workspace Switcher */}
+        <WorkspaceSwitcher />
 
         {/* Primary Navigation */}
         <nav className="space-y-1.5">
