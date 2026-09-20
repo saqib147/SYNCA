@@ -5,6 +5,97 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Phase 3 - Projects & Tasks] - 2026-09-21
+
+### Added
+- **Project Roles & Granular Access Control**:
+  - Defined `ProjectRole = 'Admin' | 'Member' | 'Viewer'` and `ProjectTeamMember` interface in `@synca/types` and `createProjectSchema` in `@synca/zod-schemas`.
+  - Added `members` subdocument array to Mongoose `Project` model storing `{ userId, role }`.
+  - Updated `createProject` in `apps/api/src/controllers/project.controller.ts`: project creator is automatically assigned `'Admin'` role; invited members are assigned their selected role (default `'Member'`).
+  - Updated `getProjectById` and `updateProject` to enrich `teamMemberProfiles` with `projectRole`.
+  - Updated `<CreateProjectModal />`: allows assigning project roles (`Admin / PM`, `Contributor`, `Viewer`) when selecting team members, automatically designating creator as Admin.
+  - Updated `<EditTeamModal />`: allows Project Admins and Workspace Admins to update individual member project roles dynamically with visual color-coded selector pills.
+  - Updated Project Overview page (`/projects/[id]`):
+    - Displays color-coded project role badges (`Admin / PM` in amber, `Contributor` in emerald, `Viewer` in blue) in the Assigned Team roster card.
+    - Viewers have read-only access to board and task list without permission to create, edit, or delete tasks.
+    - Project Settings tab and "Manage Team" action are restricted exclusively to Project Admins and Workspace Admins.
+- **Data Models & Schema Alignment (Step 1)**:
+  - Scoped Mongoose `Project` and `Task` schemas in `apps/api/src/models/` to `workspaceId` with compound indexes (`workspaceId + slug`, `workspaceId + status`, `projectId + status + order`).
+  - Aligned `packages/types/src/models.ts` with comprehensive `Project`, `Task`, `Subtask`, and `Milestone` interfaces.
+  - Created Zod validation schemas in `packages/zod-schemas/src/project.ts` and `task.ts` with `z.input` typing supporting optional default values for API consumers.
+- **Project Backend REST API (Step 2)**:
+  - Implemented `/api/v1/projects` endpoints in `apps/api/src/controllers/project.controller.ts` and `routes/project.routes.ts`:
+    - `POST /api/v1/projects`: Create project in workspace with auto-generated slug.
+    - `GET /api/v1/projects`: List workspace projects with text search, status filtering, and pagination.
+    - `GET /api/v1/projects/:id`: Fetch project details enriched with Clerk team member profiles (avatars, full names, emails).
+    - `PATCH /api/v1/projects/:id`: Update project details, goals, milestones, or member roster.
+    - `DELETE /api/v1/projects/:id`: Soft delete project and its associated tasks.
+- **Task Backend REST API (Step 3)**:
+  - Implemented `/api/v1/tasks` endpoints in `apps/api/src/controllers/task.controller.ts` and `routes/task.routes.ts`:
+    - `POST /api/v1/tasks`: Create project task or private personal task with subtasks checklist.
+    - `GET /api/v1/tasks`: Fetch tasks for a project with status and private filters.
+    - `GET /api/v1/tasks/my`: Fetch all tasks assigned to or created by current user across workspace.
+    - `PATCH /api/v1/tasks/:id`: Update task fields, priority, due date, subtasks, or status.
+    - `PUT /api/v1/tasks/:id/move`: Atomic Kanban column transition and reordering with automatic order shifting.
+    - `DELETE /api/v1/tasks/:id`: Soft delete task.
+- **Frontend API Clients & Custom Hooks (Step 4)**:
+  - Built authenticated API clients `apps/web/src/lib/api/project.api.ts` and `task.api.ts` with automatic 401 retry resilience via `withAuth`.
+  - Built `useProjects` React hook managing workspace project state with search and filtering.
+  - Built `useTasks` React hook with optimistic UI reordering for Kanban drag-and-drop.
+- **Project Portfolio Page & Create Modal (Step 5)**:
+  - Replaced dummy project cards in `apps/web/src/app/(app)/projects/page.tsx` with live workspace data.
+  - Built top metrics summary strip (*Total Projects, Active Sprint, On Track, At Risk, Completed*).
+  - Built status filter pills, search input, and responsive project cards with progress bars and member avatars.
+  - Built `<CreateProjectModal />` (`apps/web/src/components/project/CreateProjectModal.tsx`) using React Portal (`z-[9999]`) with workspace team member roster picker, status, and privacy toggles.
+- **Dynamic Project Detail Page (Step 6)**:
+  - Implemented `apps/web/src/app/(app)/projects/[id]/page.tsx` with dynamic ID/slug resolution, breadcrumb navigation, completion gauge, and team member chips.
+  - Built tab navigation across **Overview**, **Board**, **List**, and **Settings**.
+  - Overview tab displays rich project brief, interactive goals checklist with instant toggle, and milestone progress cards.
+  - Settings tab provides project update forms, status controls, and soft-deletion trigger.
+- **Kanban Board with Drag-and-Drop (Step 7)**:
+  - Installed `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`.
+  - Built `apps/web/src/components/project/ProjectKanbanBoard.tsx` with columns for *To Do*, *In Progress*, and *Done*.
+  - Added sortable task cards, drag handles, subtask checklist counters, priority badges, and column task counters.
+  - Supported drag-and-drop between columns with optimistic UI updates and backend synchronization.
+- **Tabular Task List & Task Modal (Step 8)**:
+  - Built `apps/web/src/components/project/ProjectTaskTable.tsx` for structured list view with inline status badges, due dates, priority pills, and quick action menus.
+  - Built `<TaskModal />` (`apps/web/src/components/task/TaskModal.tsx`) using React Portal for creating and editing tasks with priority selection, date pickers, workspace assignee assignment, and dynamic checklist management.
+- **Dashboard Live Integration (Step 9)**:
+  - Connected `apps/web/src/app/(app)/dashboard/page.tsx` to live user tasks via `fetchMyTasks`.
+  - Dynamic Task Status column (*Upcoming*, *Overdue*, *Completed*) mapped from live task status and due dates.
+  - Dynamic Task Completion gauge calculated from active vs completed tasks.
+  - Dynamic Ongoing Projects widget showing active workspace projects with direct links to project detail pages.
+### Fixed
+- **Sidebar Real Projects**: Removed hardcoded sample projects (`Develop API Endpoints`, `Alfa - Onboarding Flow`, etc.) from `Sidebar.tsx`. Connected "All Projects" sub-navigation to live workspace projects via `useProjects()` with active route highlighting and a fallback `+ Create a project` link.
+- **Member Name & Avatar Resolution**:
+  - Enriched workspace members in `getUserWorkspaces` (`apps/api/src/controllers/workspace.controller.ts`) with Clerk user profiles (`clerkClient.users.getUserList`), providing real full names, email addresses, and avatars.
+  - Resolved `Member (wRYt)` fallback bug in `CreateProjectModal.tsx`: now displays member full names and profile avatars, with clear `(You)` indicators.
+  - Resolved `YT` slice avatar bug in `ProjectCard` (`apps/web/src/app/(app)/projects/page.tsx`): now cross-references `activeWorkspace.members` to render actual user avatars and real name initials.
+- **Project Progress Calculation**: Fixed project card progress fallback defaulting to `40%` on newly created projects with 0 goals. Now accurately starts at `0%` until goals or tasks are completed.
+- **Dashboard Real Data & Clean Empty States**:
+  - Completely purged static mock arrays (`upcomingTasks`, `overdueTasks`, `completedTasks`, `ongoingProjects`, `recentChats`) from `dashboard/page.tsx`.
+  - Replaced fake `84.2%` completion rate with actual live task percentage (clean `0%` when zero tasks).
+  - Replaced fake `48 avg` team velocity with live count of tasks completed within the past 7 days.
+  - Replaced fake ongoing projects with real workspace projects or a clean empty state.
+  - Replaced hardcoded recent chats with real workspace team members.
+  - Replaced static task lists with elegant empty states guiding the user to create tasks.
+- **Client Route Param Safety**: Updated `apps/web/src/app/(app)/projects/[id]/page.tsx` to use `useParams()` from `next/navigation` for reactive, safe client route resolution, and cleared stale `.next` webpack build chunks.
+- **Private Project & Task Access Enforcement**:
+  - Enforced privacy check in `apps/api/src/controllers/project.controller.ts`: When a project has `privacy: 'Private'`, non-team members (who are not workspace owners or admins) cannot list it, view its details, or modify it.
+  - Enforced project privacy check in `apps/api/src/controllers/task.controller.ts`: Non-team members cannot retrieve or create tasks inside `Private` projects.
+  - Project deletion is strictly restricted to workspace owners and admins.
+- **Roles, Permissions & Project Team Management**:
+  - Authored comprehensive specification [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md) defining the three-tier inheritance hierarchy (Workspace -> Project -> Task), WorkspaceWide vs TeamWide (Private) visibility rules, Project roles, and Task-level visibility controls.
+  - Implemented `<EditTeamModal />` (`apps/web/src/components/project/EditTeamModal.tsx`) enabling project managers and workspace admins to search, select, add, and remove workspace members from any project team.
+  - Added "Manage Team" triggers in the Project Overview tab, the Top Header team avatar strip, and a dedicated "Project Team" card in the Settings tab.
+  - Enforced WorkspaceWide read-only overview restriction in `apps/web/src/app/(app)/projects/[id]/page.tsx`: Non-team workspace members can only view the Overview & Goals tab in read-only mode with an ambient banner, while Board, List, Settings, and Task creation are locked.
+  - Enforced backend authorization in `apps/api/src/controllers/task.controller.ts` on `getProjectTasks`, `createTask`, `updateTask`, and `moveTask`: restricted strictly to project team members and workspace admins.
+- **Deleted Project & Task Synchronization**:
+  - **Cascade Soft-Deletion**: Updated `deleteProject` in `apps/api/src/controllers/project.controller.ts` to automatically cascade soft-delete all child tasks (`Task.updateMany({ projectId: project._id }, { deletedAt: new Date() })`).
+  - **Self-Healing & Deleted Project Filtering**: Updated `getMyTasks` in `apps/api/src/controllers/task.controller.ts` to self-heal orphaned tasks from previously deleted projects and strictly restrict returned tasks to currently active projects or personal tasks.
+  - **Dashboard Task Filtering**: Updated `apps/web/src/app/(app)/dashboard/page.tsx` to filter tasks against active projects so orphaned tasks from deleted projects never render.
+  - **Live Multi-Component Event Synchronization**: Added `synca:projects-changed` and `synca:tasks-changed` event dispatchers and listeners across `useProjects`, `useTasks`, `page.tsx`, and `dashboard/page.tsx`. When a project or task is created, modified, or deleted anywhere in the app, the Sidebar, Dashboard, and Project views instantly re-synchronize without requiring a page refresh.
+
 ## [Dark Mode & Theme Architecture] - 2026-09-20
 
 ### Added

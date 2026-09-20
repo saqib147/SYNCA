@@ -1,98 +1,57 @@
 'use client';
 
-import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus, Loader2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { TaskCard } from '@/components/shared/TaskCard';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
+import { useWorkspace } from '@/hooks/useWorkspace';
+import { useProjects } from '@/hooks/useProjects';
+import { fetchMyTasks } from '@/lib/api/task.api';
+import { Task } from '@synca/types';
 
-const upcomingTasks = [
-  { id: '1', title: 'API Documentation', project: 'Cloud Migration', dueDate: 'Oct 05', status: 'Upcoming', tag: 'DevSek', bgVariant: 'yellow' as const },
-  { id: '2', title: 'Write Test Suites', project: 'Core API', dueDate: 'Sep 12', status: 'Upcoming', tag: 'Testing', bgVariant: 'peach' as const },
-  { id: '3', title: 'Configure CDN Cache', project: 'Cloud Migration', dueDate: 'Sep 15', status: 'Upcoming', tag: 'DevOps', bgVariant: 'white' as const },
-  { id: '4', title: 'Design Landing Page V2', project: 'Brand Redesign', dueDate: 'Sep 18', status: 'Upcoming', tag: 'Design', bgVariant: 'white' as const },
-  { id: '5', title: 'Refactor Mongoose Helpers', project: 'Database Core', dueDate: 'Sep 22', status: 'Upcoming', tag: 'Database', bgVariant: 'white' as const },
-];
 
-const overdueTasks = [
-  { id: 'o1', title: 'Fix Session Token Hijack Vuln', project: 'Security Patch', dueDate: 'Jul 15', status: 'Overdue', tag: 'SecScan', bgVariant: 'peach' as const },
-  { id: 'o2', title: 'Route Guard Optimization', project: 'Clerk Migration', dueDate: 'Jul 20', status: 'Overdue', tag: 'DevOps', bgVariant: 'white' as const },
-  { id: 'o3', title: 'CORS Configuration Check', project: 'Core API', dueDate: 'Jul 22', status: 'Overdue', tag: 'Backend', bgVariant: 'white' as const },
-];
-
-const completedTasks = [
-  { id: 'c1', title: 'Upstash Connection Pool Setup', project: 'Database Core', dueDate: 'Jul 27', status: 'Completed', tag: 'Redis', bgVariant: 'white' as const },
-  { id: 'c2', title: 'Clerk Provider Registration', project: 'Auth Shell', dueDate: 'Jul 26', status: 'Completed', tag: 'Frontend', bgVariant: 'white' as const },
-  { id: 'c3', title: 'Monorepo Initialization', project: 'Core Setup', dueDate: 'Jul 25', status: 'Completed', tag: 'Turbo', bgVariant: 'white' as const },
-];
-
-const ongoingProjects = [
-  {
-    name: 'Develop API Endpoints',
-    dueDate: '26 Nov, 2024',
-    icon: (
-      <svg className="w-8 h-8 flex-shrink-0 text-[#fca5a5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-        <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Onboarding Flow',
-    dueDate: '26 Nov, 2024',
-    icon: (
-      <svg className="w-8 h-8 flex-shrink-0 text-[#854d0e]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2C12 7.52 7.52 12 2 12c5.52 0 10 4.48 10 10 0-5.52 4.48-10 10-10-5.52 0-10-4.48-10-10z" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Build Dashboard',
-    dueDate: '26 Nov, 2024',
-    icon: (
-      <svg className="w-8 h-8 flex-shrink-0 text-[#2563eb]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M4 18h6L16 6H10L4 18zM10 18h6l6-12h-6l-6 12z" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Optimize Page Load',
-    dueDate: '26 Nov, 2024',
-    icon: (
-      <svg className="w-8 h-8 flex-shrink-0 text-[#0284c7]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-4a6 6 0 1 0 0-12 6 6 0 0 0 0 12z" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Cross-Browser Testing',
-    dueDate: '26 Nov, 2024',
-    icon: (
-      <svg className="w-8 h-8 flex-shrink-0 text-[#0d9488]" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="6" cy="6" r="2.2" />
-        <circle cx="12" cy="6" r="2.2" />
-        <circle cx="18" cy="6" r="2.2" />
-        <circle cx="6" cy="12" r="2.2" />
-        <circle cx="12" cy="12" r="2.2" />
-        <circle cx="18" cy="12" r="2.2" />
-        <circle cx="6" cy="18" r="2.2" />
-        <circle cx="12" cy="18" r="2.2" />
-        <circle cx="18" cy="18" r="2.2" />
-      </svg>
-    ),
-  },
-];
-
-const recentChats = [
-  { name: 'Saqib Arshad', role: 'Full-Stack Developer', msg: 'Whats the scene bro about the FYP?', status: 'online', unreadCount: 3, avatarBg: 'bg-indigo-100 text-indigo-700' },
-  { name: 'Malaika Tabassum', role: 'Game Developer', msg: 'The new Room templates are live!', status: 'online', unreadCount: 1, avatarBg: 'bg-fuchsia-100 text-fuchsia-700' },
-  { name: 'Ayesha A.', role: 'Web Developer', msg: 'I checked the Mongoose connection pooling.', status: 'offline', unreadCount: 0, avatarBg: 'bg-pink-100 text-pink-700' },
-  { name: 'Haris Hashim', role: 'Business Developer', msg: 'Let\'s schedule the walkthrough demo.', status: 'offline', unreadCount: 0, avatarBg: 'bg-amber-100 text-amber-700' },
-];
 
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
+  const { activeWorkspace } = useWorkspace();
+  const { projects } = useProjects();
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Overdue' | 'Completed'>('Upcoming');
   const [greeting, setGreeting] = useState('Good Evening');
+  const [liveTasks, setLiveTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTasks() {
+      if (!activeWorkspace?._id) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const fetched = await fetchMyTasks(activeWorkspace._id, token);
+        if (isMounted) {
+          setLiveTasks(fetched);
+        }
+      } catch (err) {
+        console.warn('[DashboardPage] Could not load live tasks, using fallbacks:', err);
+      }
+    }
+    loadTasks();
+
+    const handleSync = () => {
+      loadTasks();
+    };
+
+    window.addEventListener('synca:projects-changed', handleSync);
+    window.addEventListener('synca:tasks-changed', handleSync);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('synca:projects-changed', handleSync);
+      window.removeEventListener('synca:tasks-changed', handleSync);
+    };
+  }, [activeWorkspace?._id, getToken]);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -121,6 +80,85 @@ export default function DashboardPage() {
   };
 
   const userName = getDisplayName();
+
+  // Exclude tasks that belong to projects that are no longer active
+  const validTasks = useMemo(() => {
+    return liveTasks.filter((t) => {
+      if (!t.projectId) return true; // Personal task
+      return projects.some((p) => p._id === t.projectId);
+    });
+  }, [liveTasks, projects]);
+
+  const getProjectName = (projectId?: string | null) => {
+    if (!projectId) return 'Personal Task';
+    const found = projects.find((p) => p._id === projectId);
+    return found?.name || 'Active Project';
+  };
+
+  const displayedUpcoming = useMemo(() => {
+    return validTasks
+      .filter((t) => t.status !== 'Done' && (!t.dueDate || new Date(t.dueDate) >= new Date()))
+      .map((t) => ({
+        id: t._id,
+        title: t.title,
+        project: getProjectName(t.projectId),
+        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Flexible',
+        status: 'Upcoming',
+        tag: t.priority,
+        bgVariant: (t.priority === 'High' ? 'peach' : t.priority === 'Medium' ? 'yellow' : 'white') as any,
+      }));
+  }, [validTasks, projects]);
+
+  const displayedOverdue = useMemo(() => {
+    return validTasks
+      .filter((t) => t.status !== 'Done' && t.dueDate && new Date(t.dueDate) < new Date())
+      .map((t) => ({
+        id: t._id,
+        title: t.title,
+        project: getProjectName(t.projectId),
+        dueDate: t.dueDate ? new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Overdue',
+        status: 'Overdue',
+        tag: t.priority,
+        bgVariant: 'peach' as any,
+      }));
+  }, [validTasks, projects]);
+
+  const displayedCompleted = useMemo(() => {
+    return validTasks
+      .filter((t) => t.status === 'Done')
+      .map((t) => ({
+        id: t._id,
+        title: t.title,
+        project: getProjectName(t.projectId),
+        dueDate: t.updatedAt ? new Date(t.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Done',
+        status: 'Completed',
+        tag: 'Done',
+        bgVariant: 'white' as any,
+      }));
+  }, [validTasks, projects]);
+
+  const completionPct = useMemo(() => {
+    if (validTasks.length === 0) return 0;
+    const completed = validTasks.filter((t) => t.status === 'Done').length;
+    return Math.round((completed / validTasks.length) * 100);
+  }, [validTasks]);
+
+  const activeProjectsCount = projects.length;
+
+  const currentTasks =
+    activeTab === 'Upcoming'
+      ? displayedUpcoming
+      : activeTab === 'Overdue'
+        ? displayedOverdue
+        : displayedCompleted;
+
+  const weeklyCompletedCount = useMemo(() => {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    return validTasks.filter(
+      (t) => t.status === 'Done' && t.updatedAt && new Date(t.updatedAt) >= oneWeekAgo
+    ).length;
+  }, [validTasks]);
 
   return (
     <div className="space-y-6">
@@ -155,15 +193,17 @@ export default function DashboardPage() {
                   strokeWidth="3"
                   fill="transparent"
                   strokeDasharray={2 * Math.PI * 14}
-                  strokeDashoffset={2 * Math.PI * 14 - (84.2 / 100) * (2 * Math.PI * 14)}
+                  strokeDashoffset={2 * Math.PI * 14 - (completionPct / 100) * (2 * Math.PI * 14)}
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">84%</span>
+              <span className="absolute text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                {Math.round(completionPct)}%
+              </span>
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-emerald-500/80 transition-colors">Task Completion</p>
-              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">84.2%</p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">{completionPct}%</p>
             </div>
           </div>
 
@@ -174,7 +214,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-blue-500/80 transition-colors">Active Projects</p>
-              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">12</p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">{activeProjectsCount}</p>
             </div>
           </div>
 
@@ -185,7 +225,9 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-amber-500/80 transition-colors">Team Velocity</p>
-              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">48 <span className="text-xs font-semibold text-zinc-400">avg</span></p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">
+                {weeklyCompletedCount} <span className="text-xs font-semibold text-zinc-400">tasks/wk</span>
+              </p>
             </div>
           </div>
 
@@ -219,24 +261,41 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Render Pixel-Matched Task Cards */}
+          {/* Render Real Task Cards or Clean Empty State */}
           <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 scrollbar-none">
-            {(activeTab === 'Upcoming'
-              ? upcomingTasks
-              : activeTab === 'Overdue'
-                ? overdueTasks
-                : completedTasks
-            ).map((task) => (
-              <TaskCard
-                key={task.id}
-                title={task.title}
-                projectName={task.project}
-                dueDate={task.dueDate}
-                status={task.status}
-                tag={task.tag}
-                bgVariant={task.bgVariant}
-              />
-            ))}
+            {currentTasks.length > 0 ? (
+              currentTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  title={task.title}
+                  projectName={task.project}
+                  dueDate={task.dueDate}
+                  status={task.status}
+                  tag={task.tag}
+                  bgVariant={task.bgVariant}
+                />
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.08] flex items-center justify-center text-zinc-400">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500/60" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                    No {activeTab.toLowerCase()} tasks
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-1 max-w-[220px]">
+                    Tasks assigned to you in this workspace will automatically appear here.
+                  </p>
+                </div>
+                <Link
+                  href="/projects"
+                  className="mt-1 px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-white/[0.06] hover:bg-zinc-200 dark:hover:bg-white/[0.1] text-xs font-semibold text-zinc-800 dark:text-zinc-200 transition-colors"
+                >
+                  Go to Projects
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -249,7 +308,7 @@ export default function DashboardPage() {
                 <h2 className="text-2xl font-normal text-zinc-900 dark:text-zinc-100 tracking-tight">Completed Tasks</h2>
               </div>
               <div className="text-right flex flex-col text-[11px] font-medium text-zinc-500 dark:text-zinc-400 leading-tight">
-                <span>24 Tasks Completed this</span>
+                <span>{weeklyCompletedCount} Tasks Completed this</span>
                 <span>Week</span>
               </div>
             </div>
@@ -288,59 +347,121 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right Column: Ongoing Projects & Recent Chats */}
+        {/* Right Column: Ongoing Projects & Team Members */}
         <div className="space-y-6 flex flex-col">
           {/* Ongoing Projects */}
           <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] space-y-5 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100 font-funnel">Ongoing Projects</h2>
-              <button className="text-xs font-normal text-zinc-800 dark:text-zinc-300 border border-zinc-300/90 dark:border-white/[0.12] px-3 py-1 rounded-full hover:bg-zinc-50 dark:hover:bg-white/[0.06] transition-colors flex items-center gap-1">
+              <Link
+                href="/projects"
+                className="text-xs font-normal text-zinc-800 dark:text-zinc-300 border border-zinc-300/90 dark:border-white/[0.12] px-3 py-1 rounded-full hover:bg-zinc-50 dark:hover:bg-white/[0.06] transition-colors flex items-center gap-1"
+              >
                 New <ArrowUpRight className="w-3 h-3" />
-              </button>
+              </Link>
             </div>
 
             <div className="space-y-4">
-              {ongoingProjects.map((proj) => (
-                <div key={proj.name} className="flex items-center gap-4 py-0.5 cursor-pointer group">
-                  {proj.icon}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-base font-normal text-zinc-900 dark:text-zinc-100 truncate font-funnel group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">{proj.name}</h4>
-                    <p className="text-xs text-zinc-400 dark:text-zinc-500 font-normal font-sans">Due Date, {proj.dueDate}</p>
+              {projects.length > 0 ? (
+                projects.slice(0, 3).map((proj) => (
+                  <Link
+                    key={proj._id}
+                    href={`/projects/${proj._id}`}
+                    className="flex items-center gap-4 py-0.5 cursor-pointer group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-xs">
+                      {proj.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-base font-normal text-zinc-900 dark:text-zinc-100 truncate font-funnel group-hover:text-emerald-500 transition-colors">
+                        {proj.name}
+                      </h4>
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-normal font-sans">
+                        Status: <span className="capitalize">{proj.status}</span>
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="py-8 flex flex-col items-center justify-center text-center space-y-2">
+                  <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-white/[0.04] flex items-center justify-center text-zinc-400">
+                    <FolderGit2 className="w-5 h-5 text-blue-500/60" />
                   </div>
+                  <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">No active projects yet</p>
+                  <p className="text-[11px] text-zinc-400">Launch an initiative in this workspace to track it.</p>
+                  <Link
+                    href="/projects"
+                    className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#d8f870] text-zinc-950 hover:bg-[#c4ea48] transition-colors shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New Project</span>
+                  </Link>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
-          {/* Recent Chats */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] space-y-4 flex-1 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm">
-            <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Recent Chats</h2>
-            <div className="space-y-3">
-              {recentChats.map((chat) => (
-                <div key={chat.name} className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-50/50 dark:bg-white/[0.03] border border-zinc-100/50 dark:border-white/[0.06] hover:bg-zinc-100/60 dark:hover:bg-white/[0.07] transition-all cursor-pointer hover:scale-[1.01] group/chat">
-                  {/* Avatar with Presence Indicator */}
-                  <div className="relative flex-shrink-0">
-                    <div className={`w-9 h-9 rounded-full ${chat.avatarBg} flex items-center justify-center text-xs font-black`}>
-                      {chat.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    {chat.status === 'online' && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#16191e] animate-pulse" />
-                    )}
-                  </div>
+          {/* Team Members */}
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] space-y-4 flex-1 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Team Members</h2>
+              <Link href="/chats" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+                Open Chats →
+              </Link>
+            </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-normal text-zinc-900 dark:text-zinc-100 truncate pr-2">{chat.name}</h4>
-                      {chat.unreadCount > 0 && (
-                        <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-white text-[9px] font-black">
-                          {chat.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium truncate mt-0.5 group-hover/chat:text-zinc-600 dark:group-hover/chat:text-zinc-300 transition-colors">{chat.msg}</p>
-                  </div>
+            <div className="space-y-2.5 flex-1">
+              {activeWorkspace?.members && activeWorkspace.members.length > 0 ? (
+                activeWorkspace.members.slice(0, 4).map((member) => {
+                  const isCurrentUser = member.userId === user?.id;
+                  const name = isCurrentUser
+                    ? (user?.fullName || member.name || 'You')
+                    : (member.name || member.email || 'Team Member');
+                  const avatarUrl = isCurrentUser ? (user?.imageUrl || member.imageUrl) : member.imageUrl;
+                  const initials = name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+
+                  return (
+                    <Link
+                      key={member.userId}
+                      href="/chats"
+                      className="flex items-center gap-3 p-2 rounded-2xl bg-zinc-50/50 dark:bg-white/[0.03] border border-zinc-100/50 dark:border-white/[0.06] hover:bg-zinc-100/60 dark:hover:bg-white/[0.07] transition-all cursor-pointer hover:scale-[1.01] group/chat"
+                    >
+                      <div className="relative flex-shrink-0">
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt={name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center">
+                            {initials}
+                          </div>
+                        )}
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#16191e]" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate pr-2">
+                            {name}{isCurrentUser ? ' (You)' : ''}
+                          </h4>
+                          <span className="text-[10px] text-zinc-400 capitalize">
+                            {member.role || 'Member'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                          {member.email || 'Workspace Member'}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })
+              ) : (
+                <div className="py-6 text-center text-zinc-400 text-xs">
+                  No other members in this workspace.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 

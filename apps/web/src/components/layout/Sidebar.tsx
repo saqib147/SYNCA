@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useUser, useClerk } from '@clerk/nextjs';
 import { WorkspaceSwitcher } from '@/components/workspace/WorkspaceSwitcher';
+import { useProjects } from '@/hooks/useProjects';
 
 interface NavItem {
   name: string;
@@ -25,14 +26,6 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'All Projects', href: '/projects', icon: FolderKanban },
-];
-
-const sampleProjects = [
-  'Develop API Endpoints',
-  'Alfa - Onboarding Flow',
-  'Flowfer - Build Dashboard',
-  'DevSec - Optimize Page Load',
-  'Signer - Optimize Page Load',
 ];
 
 const sampleMembers = [
@@ -47,6 +40,7 @@ const sampleMembers = [
 export function Sidebar() {
   const pathname = usePathname();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const { projects } = useProjects();
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
 
@@ -90,15 +84,31 @@ export function Sidebar() {
                   {/* Sub-projects list */}
                   {projectsExpanded && (
                     <div className="pl-8 pr-2 py-1 space-y-1 text-xs text-zinc-400 border-l border-zinc-800/60 ml-5">
-                      {sampleProjects.map((proj) => (
-                        <div
-                          key={proj}
-                          className="hover:text-[#d8f870] cursor-pointer py-1 truncate transition-colors flex items-center gap-1.5"
+                      {projects.length > 0 ? (
+                        projects.slice(0, 8).map((proj) => {
+                          const isProjActive = pathname === `/projects/${proj._id}`;
+                          return (
+                            <Link
+                              key={proj._id}
+                              href={`/projects/${proj._id}`}
+                              className={cn(
+                                'py-1 truncate transition-colors flex items-center gap-1.5 hover:text-[#d8f870]',
+                                isProjActive ? 'text-[#d8f870] font-semibold' : 'text-zinc-400'
+                              )}
+                            >
+                              <span className={cn('text-xs', isProjActive ? 'text-[#d8f870]' : 'text-zinc-600')}>›</span>
+                              <span className="truncate">{proj.name}</span>
+                            </Link>
+                          );
+                        })
+                      ) : (
+                        <Link
+                          href="/projects"
+                          className="hover:text-[#d8f870] cursor-pointer py-1 truncate transition-colors flex items-center gap-1.5 text-zinc-500 italic"
                         >
-                          <span className="text-zinc-600">›</span>
-                          <span className="truncate">{proj}</span>
-                        </div>
-                      ))}
+                          <span>+ Create a project</span>
+                        </Link>
+                      )}
                     </div>
                   )}
                 </div>

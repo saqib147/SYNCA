@@ -8,6 +8,8 @@ import { requireAuth } from './middleware/auth.middleware.js';
 import { redisClient } from './lib/redis.js';
 import fileRouter from './routes/file.routes.js';
 import workspaceRouter from './routes/workspace.routes.js';
+import projectRouter from './routes/project.routes.js';
+import taskRouter from './routes/task.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -25,6 +27,8 @@ export const createApp = () => {
   // Register API routers
   app.use('/api/v1/files', fileRouter);
   app.use('/api/v1/workspaces', workspaceRouter);
+  app.use('/api/v1/projects', projectRouter);
+  app.use('/api/v1/tasks', taskRouter);
 
   app.get('/health', async (_req, res) => {
     const dbState = mongoose.connection.readyState;

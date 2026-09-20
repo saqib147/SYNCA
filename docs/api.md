@@ -140,34 +140,45 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 ### 2.2 Project Management (`/api/v1/projects`)
 
 #### `POST /api/v1/projects`
-- **Description**: Create a new project.
-- **Permission**: `project:create`
+- **Description**: Create a new project within a workspace. Creator is automatically designated as project `Admin`.
 - **Request Body**:
   ```json
   {
-    "roomId": "64f1a2...",
+    "workspaceId": "64f1a2...",
     "name": "Mobile App V2",
     "description": "Redesign of mobile experience",
     "status": "ActiveSprint",
     "privacy": "RoomWide",
-    "teamMembers": ["user_2abc...", "user_3xyz..."]
+    "teamMembers": ["user_2abc...", "user_3xyz..."],
+    "members": [
+      { "userId": "user_2abc...", "role": "Admin" },
+      { "userId": "user_3xyz...", "role": "Member" }
+    ],
+    "goals": [
+      { "title": "Launch Beta", "completed": false }
+    ],
+    "milestones": [
+      { "title": "Sprint 1", "status": "Upcoming", "progress": 0 }
+    ]
   }
   ```
 
 #### `GET /api/v1/projects`
-- **Query Params**: `roomId` (required), `status`, `priority`, `page`, `limit`
-- **Response `200`**: List of projects with pagination metadata.
+- **Query Params**: `workspaceId` (required), `status`, `search`, `page`, `limit`
+- **Privacy Enforcement**: Projects with `privacy: 'RoomWide'` are visible to all workspace members. Projects with `privacy: 'Private'` are only returned if the caller is an assigned team member or workspace owner/admin.
+- **Response `200`**: List of workspace projects with pagination metadata.
 
 #### `GET /api/v1/projects/:id`
-- **Description**: Get detailed project view including Overview brief, Goals, and Milestones.
+- **Description**: Get detailed project view including Overview brief, Goals, Milestones, and enriched Clerk team member profiles with `projectRole` (`Admin`, `Member`, or `Viewer`).
+- **Access Control**: Returns `403 FORBIDDEN` if project is `Private` and caller is not a team member, owner, or admin. Non-team members on `RoomWide` projects receive overview-only data.
 
 #### `PATCH /api/v1/projects/:id`
-- **Description**: Update project status, brief, goals, or settings.
-- **Permission**: `project:edit`
+- **Description**: Update project status, description, goals, milestones, team members, or project roles (`members: [{ userId, role }]`).
+- **Access Control**: Requires workspace membership. For `Private` projects, restricted to assigned team members, owners, or admins. Project role editing is restricted to Project Admins and Workspace Admins.
 
 #### `DELETE /api/v1/projects/:id`
-- **Description**: Soft delete project.
-- **Permission**: `project:delete`
+- **Description**: Soft delete project and associated tasks.
+- **Access Control**: Restricted strictly to workspace owners and admins (`403 FORBIDDEN` otherwise).
 
 ---
 
@@ -178,10 +189,11 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 - **Request Body**:
   ```json
   {
+    "workspaceId": "64f1a2...",
     "projectId": "64f1b3...",
     "title": "Implement WebSockets in Express",
     "description": "Connect socket.io with Upstash Redis adapter",
-    "status": "In Progress",
+    "status": "To Do",
     "priority": "High",
     "assignees": ["user_2abc..."],
     "dueDate": "2026-08-15T18:00:00.000Z",
@@ -195,16 +207,29 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 
 #### `GET /api/v1/tasks`
 - **Query Params**:
-  - For Project tasks: `projectId=<id>&status=<status>`
-  - For Personal tasks: `userId=<id>&private=true`
+  - `projectId=<id>` (fetch tasks for a specific project Kanban/List view)
+  - `status=<status>` (optional filter)
+  - `isPrivate=true` (optional personal filter)
+
+#### `GET /api/v1/tasks/my`
+- **Description**: Fetch all tasks assigned to or created by current authenticated user.
+- **Query Params**: `workspaceId`, `status`
 
 #### `PATCH /api/v1/tasks/:id`
-- **Description**: Update task (drag-and-drop status update, subtasks, assignees).
-- **Permission**: `task:edit`
+- **Description**: Update task title, description, priority, assignees, subtasks, or status.
+
+#### `PUT /api/v1/tasks/:id/move`
+- **Description**: Kanban reordering and column movement. Automatically reorders peer tasks.
+- **Request Body**:
+  ```json
+  {
+    "newStatus": "In Progress",
+    "newOrder": 2
+  }
+  ```
 
 #### `DELETE /api/v1/tasks/:id`
 - **Description**: Soft delete task.
-- **Permission**: `task:delete`
 
 ---
 

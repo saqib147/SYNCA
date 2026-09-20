@@ -75,17 +75,31 @@ Project portfolio items inside a workspace.
 ```typescript
 {
   _id: ObjectId,
-  roomId: ObjectId,      // Refers to Room._id
+  workspaceId: ObjectId, // Refers to Workspace._id
+  roomId: ObjectId,      // Optional room reference
   name: String,
+  slug: String,          // URL-friendly slug
   description: String,   // Rich text brief
   status: String,        // 'OnTrack' | 'ActiveSprint' | 'AtRisk' | 'Completed' | 'Archived'
   privacy: String,       // 'Private' | 'RoomWide' | 'Public'
   goals: [{
     title: String,
     description: String,
-    icon: String
+    icon: String,
+    completed: Boolean
   }],
-  teamMembers: [String], // Array of User._id strings
+  milestones: [{
+    title: String,
+    description: String,
+    status: String,      // 'Completed' | 'InProgress' | 'Upcoming'
+    progress: Number,
+    date: Date
+  }],
+  teamMembers: [String], // Array of User._id (Clerk ID) strings for fast indexed lookups
+  members: [{
+    userId: String,      // Clerk ID
+    role: String         // 'Admin' | 'Member' | 'Viewer'
+  }],
   connectedFiles: [ObjectId], // Refers to FileRef._id
   deletedAt: Date,       // Soft delete timestamp
   createdAt: Date,
@@ -99,11 +113,13 @@ Kanban board cards, subtasks, and personal to-do items.
 ```typescript
 {
   _id: ObjectId,
+  workspaceId: ObjectId, // Refers to Workspace._id
   projectId: ObjectId,   // Refers to Project._id (null for personal private tasks)
-  createdBy: String,     // Refers to User._id
+  createdBy: String,     // Refers to User._id (Clerk ID)
   title: String,         // Required, max 280 chars
   description: String,
   status: String,        // 'To Do' | 'In Progress' | 'Done' | custom column
+  order: Number,         // Ordering rank within column
   priority: String,      // 'High' | 'Medium' | 'Low'
   assignees: [String],   // Array of User._id strings
   dueDate: Date,

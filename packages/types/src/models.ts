@@ -37,60 +37,79 @@ export interface ProjectGoal {
   title: string;
   description?: string;
   icon?: string;
+  completed?: boolean;
+}
+
+export interface Milestone {
+  id?: string;
+  _id?: string;
+  projectId?: string;
+  title: string;
+  description?: string;
+  status: MilestoneStatus;
+  progress: number; // 0 - 100
+  date?: Date | string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+export type ProjectRole = 'Admin' | 'Member' | 'Viewer';
+
+export interface ProjectTeamMember {
+  userId: string;
+  role: ProjectRole;
 }
 
 export interface Project {
-  id: string;
-  roomId: string;
+  id?: string;
+  _id: string;
+  workspaceId: string;
+  roomId?: string;
   name: string;
+  slug: string;
   description?: string;
   status: ProjectStatus;
   privacy: ProjectPrivacy;
   goals?: ProjectGoal[];
+  milestones?: Milestone[];
   teamMembers: string[]; // userIds
+  members?: ProjectTeamMember[];
   connectedFiles?: string[]; // fileRefIds
-  deletedAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  deletedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export type TaskPriority = 'High' | 'Medium' | 'Low';
 
 export interface Subtask {
+  id?: string;
+  _id?: string;
   title: string;
   completed: boolean;
 }
 
 export interface Task {
-  id: string;
+  id?: string;
+  _id: string;
+  workspaceId: string;
   projectId?: string | null;
   createdBy: string;
   title: string;
   description?: string;
   status: string;
+  order?: number;
   priority: TaskPriority;
   assignees: string[]; // userIds
-  dueDate?: Date | null;
+  dueDate?: Date | string | null;
   subtasks: Subtask[];
   isPrivate: boolean;
-  deletedAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  deletedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export type MilestoneStatus = 'Completed' | 'InProgress' | 'Upcoming';
-
-export interface Milestone {
-  id: string;
-  projectId: string;
-  title: string;
-  description?: string;
-  status: MilestoneStatus;
-  progress: number; // 0 - 100
-  date: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 export type ChannelType = 'dm' | 'channel';
 

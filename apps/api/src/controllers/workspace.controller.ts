@@ -117,9 +117,40 @@ export async function getUserWorkspaces(req: Request, res: Response) {
       .sort({ updatedAt: -1 })
       .lean();
 
+    // Enrich all workspace members with Clerk user profiles
+    const allMemberUserIds = Array.from(
+      new Set(workspaces.flatMap((w) => w.members.map((m: any) => m.userId)))
+    );
+
+    let clerkUsersMap: Record<string, { name?: string; email?: string; imageUrl?: string }> = {};
+    if (allMemberUserIds.length > 0) {
+      try {
+        const clerkUsers = await clerkClient.users.getUserList({ userId: allMemberUserIds, limit: 100 });
+        for (const u of clerkUsers.data) {
+          clerkUsersMap[u.id] = {
+            name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || undefined,
+            email: u.emailAddresses?.[0]?.emailAddress,
+            imageUrl: u.imageUrl,
+          };
+        }
+      } catch (err) {
+        console.warn('[WorkspaceController] Could not fetch member details in getUserWorkspaces:', err);
+      }
+    }
+
+    const enrichedWorkspaces = workspaces.map((w) => ({
+      ...w,
+      members: w.members.map((m: any) => ({
+        ...m,
+        name: clerkUsersMap[m.userId]?.name,
+        email: clerkUsersMap[m.userId]?.email,
+        imageUrl: clerkUsersMap[m.userId]?.imageUrl,
+      })),
+    }));
+
     return res.status(200).json({
       success: true,
-      data: workspaces,
+      data: enrichedWorkspaces,
     });
   } catch (error: any) {
     console.error('[WorkspaceController] getUserWorkspaces error:', error);

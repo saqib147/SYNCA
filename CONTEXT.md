@@ -51,26 +51,26 @@ All REST API endpoints require `Authorization: Bearer <clerk_token>` header unle
 
 ### 3.2 Projects (`/api/v1/projects`)
 
+Detailed roles and permissions specification is documented in [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md).
+
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/projects` | Create a new Project in Room | `project:create` |
-| `GET` | `/api/v1/projects?roomId=` | List projects in room (filterable by status, priority, assignee) | `project:view` |
-| `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Brief, Goals, Milestones) | `project:view` |
-| `PATCH` | `/api/v1/projects/:id` | Update project metadata or privacy | `project:edit` |
-| `DELETE` | `/api/v1/projects/:id` | Soft delete project | `project:delete` |
-| `POST` | `/api/v1/projects/:id/members` | Add team member to project | `project:manage_members` |
-| `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove team member from project | `project:manage_members` |
+| `POST` | `/api/v1/projects` | Create a new Project in workspace | Authenticated (Workspace Member) |
+| `GET` | `/api/v1/projects?workspaceId=` | List projects in workspace (filters private projects for non-team members) | Authenticated |
+| `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Brief, Goals, Milestones, Enriched Members) | Team Member or WS Admin (`Private`), Workspace Member (`RoomWide` overview-only) |
+| `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, milestones, or team members | Team Member or WS Admin |
+| `DELETE` | `/api/v1/projects/:id` | Soft delete project and related tasks | Workspace Owner / Admin |
 
 ### 3.3 Tasks (`/api/v1/tasks`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | `task:create` |
-| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project | `project:view` |
-| `GET` | `/api/v1/tasks?userId=&private=true` | Get user's personal To-Do list | Authenticated (Owner only) |
-| `GET` | `/api/v1/tasks/:id` | Get task detail with subtasks | `project:view` |
-| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | `task:edit` |
-| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | `task:delete` |
+| `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | Team Member or WS Admin (Project tasks) |
+| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (Kanban / List) | Team Member or WS Admin |
+| `GET` | `/api/v1/tasks/my?workspaceId=` | Get user's assigned/created tasks across workspace | Authenticated |
+| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | Team Member or WS Admin |
+| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Team Member or WS Admin |
+| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator, Assignee, or WS Admin |
 
 ### 3.4 Milestones (`/api/v1/milestones`)
 
@@ -165,7 +165,7 @@ This repository enforces strict execution and documentation rules defined in `.a
 | **Phase 0** | Setup & Foundation | Completed | 100% |
 | **Phase 1** | Dashboard | Completed | 100% |
 | **Phase 2** | Workspace Management | Completed | 100% |
-| **Phase 3** | Projects & Tasks | PENDING | 0% |
+| **Phase 3** | Projects & Tasks | Completed | 100% |
 | **Phase 4** | Real-Time Messaging | PENDING | 0% |
 | **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
 | **Phase 6** | People & Directory | PENDING | 0% |
@@ -204,3 +204,17 @@ This repository enforces strict execution and documentation rules defined in `.a
 - [x] **Step 4: Workspace Selector & Switcher in Sidebar**: Add interactive workspace switcher dropdown to sidebar with active workspace indicators and quick-action triggers.
 - [x] **Step 5: Create & Join Workspace Modals**: Build accessible dialog modals for creating new workspaces and joining existing workspaces via 6-character alphanumeric codes.
 - [x] **Step 6: Dedicated Workspace Overview Page**: Build the `/workspaces/[id]` route featuring member roster, invite code copy buttons, and workspace settings.
+
+---
+
+### Active Phase Breakdown — Phase 3: Projects & Tasks (100%)
+
+- [x] **Step 1: Data Models & Schema Alignment**: Define Mongoose `Project` and `Task` schemas in `apps/api/src/models/` scoped to `workspaceId`. Align `packages/types` and `packages/zod-schemas` for project and task validation.
+- [x] **Step 2: Project Backend REST API (`/api/v1/projects`)**: Implement Express routes for creating, listing (with status/priority/search filtering), retrieving by ID/slug, updating, and archiving projects in active workspaces.
+- [x] **Step 3: Task Backend REST API (`/api/v1/tasks`)**: Implement Express routes for creating tasks, project-scoped listing, user personal tasks (`/api/v1/tasks/my-tasks`), updating, Kanban re-ordering (`/move`), and soft deletion.
+- [x] **Step 4: Frontend API Client & State Hooks**: Build authenticated client methods in `apps/web/src/lib/api/` (`project.api.ts`, `task.api.ts`) and create custom React hooks (`useProjects`, `useTasks`).
+- [x] **Step 5: Project Portfolio Page & Creation Modal (`/projects`)**: Connect the `/projects` page to live backend data, build status & priority filters, and implement `<CreateProjectModal />` dialog with team member assignments.
+- [x] **Step 6: Project Detail Shell & Overview Tab (`/projects/[id]`)**: Build dynamic project page with tab navigation (Overview, Board, List, Settings), project brief, goals checklist, milestones progress cards, and team roster.
+- [x] **Step 7: Kanban Board Tab with Drag-and-Drop**: Build the Board view with `@dnd-kit` drag-and-drop between columns (*To Do*, *In Progress*, *Done*, + Custom), optimistic UI updates, subtask counters, and priority pills.
+- [x] **Step 8: Task List View & Task Detail/Edit Modal**: Build tabular task list with inline toggles, and create `<TaskModal />` for editing title, description, assignees, due date, priority, and interactive subtasks.
+- [x] **Step 9: Dashboard Integration & Verification**: Connect Dashboard Task Status tabs and Private Tasks widget to live user tasks, verifying full end-to-end functionality across light and dark modes.
