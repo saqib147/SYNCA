@@ -4,6 +4,9 @@ export interface WorkspaceMember {
   userId: string;
   role: WorkspaceRole;
   joinedAt: Date | string;
+  name?: string;
+  email?: string;
+  imageUrl?: string;
 }
 
 export interface Workspace {

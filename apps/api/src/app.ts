@@ -1,3 +1,4 @@
+import './loadEnv.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -14,7 +15,12 @@ export const createApp = () => {
   app.use(helmet());
   app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
   app.use(express.json());
-  app.use(clerkMiddleware());
+  app.use(
+    clerkMiddleware({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    })
+  );
 
   // Register API routers
   app.use('/api/v1/files', fileRouter);

@@ -51,48 +51,12 @@ export function Sidebar() {
   const { signOut } = useClerk();
 
   return (
-    <aside className="w-64 bg-[#16191e] rounded-3xl p-4 text-white flex flex-col justify-between h-[calc(100vh-2rem)] sticky top-4 shadow-xl border border-zinc-800/50 select-none">
+    <aside className="w-64 bg-[#16191e]/90 dark:bg-[#10141d]/75 backdrop-blur-2xl rounded-3xl p-4 text-white flex flex-col justify-between h-[calc(100vh-2rem)] sticky top-4 z-30 shadow-2xl border border-zinc-800/60 dark:border-white/[0.08] select-none transition-colors">
+      {/* Merged User Profile & Workspace Switcher Header */}
+      <WorkspaceSwitcher />
+
       {/* Scrollable Container */}
-      <div className="flex-1 overflow-y-auto space-y-6 pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
-        
-        {/* User Profile Header */}
-        <div className="flex items-center gap-3 p-2 rounded-2xl bg-[#1e232b] border border-zinc-800/80">
-          {isLoaded && user ? (
-            <>
-              {user.imageUrl ? (
-                <img
-                  src={user.imageUrl}
-                  alt={user.fullName || 'User avatar'}
-                  className="w-10 h-10 rounded-full border-2 border-[#d8f870] object-cover"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-[#d8f870] text-zinc-900 font-bold text-sm flex items-center justify-center">
-                  {user.firstName?.charAt(0) || user.emailAddresses[0]?.emailAddress?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-semibold truncate text-zinc-100">
-                  {user.fullName || user.username || 'Synca User'}
-                </h4>
-                <p className="text-xs text-zinc-400 truncate">
-                  {user.primaryEmailAddress?.emailAddress || 'Workspace Member'}
-                </p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-3 bg-zinc-800 rounded animate-pulse w-3/4" />
-                <div className="h-2 bg-zinc-800 rounded animate-pulse w-1/2" />
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Workspace Switcher */}
-        <WorkspaceSwitcher />
-
+      <div className="flex-1 overflow-y-auto space-y-6 pr-1 scrollbar-thin scrollbar-thumb-zinc-800 mt-2">
         {/* Primary Navigation */}
         <nav className="space-y-1.5">
           {mainNavItems.map((item) => {

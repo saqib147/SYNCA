@@ -9,7 +9,7 @@ export default function AppLayout({
 }) {
   return (
     <WorkspaceProvider>
-      <div className="flex min-h-screen bg-[#f4f4f5] p-4 gap-6">
+      <div className="flex min-h-screen bg-[#f4f4f5] dark:bg-transparent p-4 gap-6 transition-colors duration-150">
         {/* Dark Sidebar */}
         <Sidebar />
 

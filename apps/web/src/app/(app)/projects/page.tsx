@@ -56,27 +56,27 @@ export default function ProjectsPage() {
       {/* Header & Filter Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-zinc-900 tracking-tight">Project Portfolio</h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage and track your active initiatives across workspace teams.</p>
+          <h1 className="text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight">Project Portfolio</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Manage and track your active initiatives across workspace teams.</p>
         </div>
 
         {/* Filter Dropdowns */}
         <div className="flex items-center gap-3">
-          <select className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm focus:outline-none">
+          <select className="bg-white dark:bg-white/[0.05] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 shadow-sm focus:outline-none">
             <option>All Statuses</option>
             <option>On Track</option>
             <option>Active Sprint</option>
             <option>At Risk</option>
           </select>
 
-          <select className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm focus:outline-none">
+          <select className="bg-white dark:bg-white/[0.05] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 shadow-sm focus:outline-none">
             <option>Priority: Any</option>
             <option>High</option>
             <option>Medium</option>
             <option>Low</option>
           </select>
 
-          <select className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm focus:outline-none">
+          <select className="bg-white dark:bg-white/[0.05] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 shadow-sm focus:outline-none">
             <option>Assignee: All</option>
           </select>
         </div>
@@ -88,41 +88,41 @@ export default function ProjectsPage() {
           <Link
             key={proj.id}
             href={`/projects/${proj.id}`}
-            className="bg-white rounded-3xl p-5 border border-zinc-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group cursor-pointer"
+            className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] shadow-sm hover:shadow-md hover:dark:border-white/[0.15] transition-all flex flex-col justify-between space-y-4 group cursor-pointer"
           >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 ${proj.statusBg}`}>
                   <span>●</span> {proj.status}
                 </span>
-                <button className="text-zinc-400 hover:text-zinc-700">
+                <button className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-zinc-900 group-hover:text-emerald-600 transition-colors">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-emerald-500 transition-colors">
                   {proj.name}
                 </h3>
-                <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{proj.desc}</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">{proj.desc}</p>
               </div>
             </div>
 
             {/* Progress or Sprint section */}
             <div className="space-y-3 pt-2">
               {proj.sprintInfo ? (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 text-center">
-                  <p className="text-xs font-semibold text-emerald-800">{proj.sprintInfo}</p>
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800 rounded-xl p-2.5 text-center">
+                  <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">{proj.sprintInfo}</p>
                 </div>
               ) : (
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs font-medium">
-                    <span className={proj.blocked ? 'text-rose-600 font-semibold flex items-center gap-1' : 'text-zinc-500'}>
+                    <span className={proj.blocked ? 'text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-1' : 'text-zinc-500 dark:text-zinc-400'}>
                       {proj.blocked ? '⚠ Blocked' : 'Progress'}
                     </span>
-                    <span className="text-zinc-900 font-bold">{proj.progress}%</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 font-bold">{proj.progress}%</span>
                   </div>
-                  <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                     <div
                       className={`h-full ${proj.progressColor} rounded-full`}
                       style={{ width: `${proj.progress}%` }}
@@ -132,18 +132,18 @@ export default function ProjectsPage() {
               )}
 
               {/* Members and Due Date */}
-              <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/[0.08]">
                 <div className="flex -space-x-1.5 overflow-hidden">
                   {proj.members.map((m, idx) => (
                     <div
                       key={idx}
-                      className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-zinc-200 text-[10px] font-bold text-zinc-800 flex items-center justify-center"
+                      className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-zinc-900 bg-zinc-200 dark:bg-zinc-700 text-[10px] font-bold text-zinc-800 dark:text-zinc-200 flex items-center justify-center"
                     >
                       {m}
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center gap-1 text-xs text-zinc-400 font-medium">
+                <div className="flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 font-medium">
                   <Calendar className="w-3.5 h-3.5" />
                   <span>{proj.date}</span>
                 </div>
@@ -153,13 +153,13 @@ export default function ProjectsPage() {
         ))}
 
         {/* New Project Card */}
-        <button className="bg-white/60 hover:bg-white rounded-3xl p-6 border-2 border-dashed border-zinc-300 hover:border-emerald-500 flex flex-col items-center justify-center text-center space-y-3 min-h-[260px] transition-all group">
-          <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+        <button className="bg-white/60 dark:bg-white/[0.02] dark:backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.05] rounded-3xl p-6 border-2 border-dashed border-zinc-300 dark:border-white/[0.1] hover:border-emerald-500 dark:hover:border-emerald-500 flex flex-col items-center justify-center text-center space-y-3 min-h-[260px] transition-all group">
+          <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-zinc-900">New Project</h3>
-            <p className="text-xs text-zinc-400">Create a new project workspace</p>
+            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">New Project</h3>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">Create a new project workspace</p>
           </div>
         </button>
       </div>

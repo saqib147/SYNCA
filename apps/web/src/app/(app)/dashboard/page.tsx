@@ -4,6 +4,7 @@ import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { TaskCard } from '@/components/shared/TaskCard';
+import { ThemeToggle } from '@/components/shared/ThemeToggle';
 
 const upcomingTasks = [
   { id: '1', title: 'API Documentation', project: 'Cloud Migration', dueDate: 'Oct 05', status: 'Upcoming', tag: 'DevSek', bgVariant: 'yellow' as const },
@@ -124,25 +125,25 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6   flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm transition-colors">
         <div>
-          <h1 className="text-3xl font-normal text-zinc-900 tracking-tight">
+          <h1 className="text-3xl font-normal text-zinc-900 dark:text-zinc-100 tracking-tight">
             {greeting}, {userName}
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">Here is what is happening across your projects today.</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Here is what is happening across your projects today.</p>
         </div>
 
-        {/* Stats Chips */}
+        {/* Stats Chips & Theme Toggle */}
         <div className="flex items-center gap-3">
           {/* Task Completion Gauge */}
-          <div className="bg-zinc-50   rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-emerald-200 transition-all duration-300 group">
+          <div className="bg-zinc-50 dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-emerald-200 dark:hover:border-emerald-500/40 transition-all duration-300 group">
             <div className="relative w-10 h-10 flex items-center justify-center flex-shrink-0">
               <svg className="w-full h-full transform -rotate-90">
                 <circle
                   cx="20"
                   cy="20"
                   r="14"
-                  className="stroke-zinc-200/60"
+                  className="stroke-zinc-200/60 dark:stroke-zinc-700"
                   strokeWidth="3"
                   fill="transparent"
                 />
@@ -158,34 +159,39 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute text-[9px] font-extrabold text-emerald-600">84%</span>
+              <span className="absolute text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">84%</span>
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-emerald-500/80 transition-colors">Task Completion</p>
-              <p className="text-lg font-black text-zinc-900 leading-none mt-1">84.2%</p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">84.2%</p>
             </div>
           </div>
 
           {/* Active Projects Card */}
-          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-blue-200 transition-all duration-300 group">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-blue-100/70">
+          <div className="bg-zinc-50 dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-blue-200 dark:hover:border-blue-500/40 transition-all duration-300 group">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-blue-100/70">
               <FolderGit2 className="w-5 h-5 transition-transform group-hover:scale-110" />
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-blue-500/80 transition-colors">Active Projects</p>
-              <p className="text-lg font-black text-zinc-900 leading-none mt-1">12</p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">12</p>
             </div>
           </div>
 
           {/* Team Velocity Card */}
-          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-amber-200 transition-all duration-300 group">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-amber-100/70">
+          <div className="bg-zinc-50 dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200/80 dark:border-white/[0.08] rounded-2xl p-3 flex items-center gap-3 min-w-[145px] hover:-translate-y-0.5 hover:border-amber-200 dark:hover:border-amber-500/40 transition-all duration-300 group">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-amber-100/70">
               <Zap className="w-5 h-5 animate-pulse transition-transform group-hover:scale-110" />
             </div>
             <div>
               <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-400 group-hover:text-amber-500/80 transition-colors">Team Velocity</p>
-              <p className="text-lg font-black text-zinc-900 leading-none mt-1">48 <span className="text-xs font-semibold text-zinc-400">avg</span></p>
+              <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 leading-none mt-1">48 <span className="text-xs font-semibold text-zinc-400">avg</span></p>
             </div>
+          </div>
+
+          {/* Direct Theme Toggle */}
+          <div className="pl-1">
+            <ThemeToggle />
           </div>
         </div>
       </div>
@@ -194,17 +200,17 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Left Column: Task Status */}
-        <div className="bg-white rounded-3xl p-5 border border-zinc-200/80 space-y-4 flex flex-col max-h-[780px]">
+        <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] space-y-4 flex flex-col max-h-[780px] shadow-sm transition-colors">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-normal text-zinc-900">Task Status</h2>
-            <div className="flex items-center bg-zinc-100 p-1 rounded-full text-xs font-medium text-zinc-500">
+            <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Task Status</h2>
+            <div className="flex items-center bg-zinc-100 dark:bg-black/40 border border-transparent dark:border-white/[0.06] p-1 rounded-full text-xs font-medium text-zinc-500 dark:text-zinc-400">
               {(['Upcoming', 'Overdue', 'Completed'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1 rounded-full transition-all ${activeTab === tab
-                    ? 'bg-[#8be6c1] text-zinc-900 font-semibold'
-                    : 'hover:text-zinc-900'
+                    ? 'bg-[#8be6c1] text-zinc-900 font-semibold shadow-sm'
+                    : 'hover:text-zinc-900 dark:hover:text-zinc-100'
                     }`}
                 >
                   {tab}
@@ -237,12 +243,12 @@ export default function DashboardPage() {
         {/* Middle Column: Charts & Private Tasks */}
         <div className="space-y-6 flex flex-col">
           {/* Completed Tasks Vertical Pill Strips */}
-          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 flex flex-col justify-between hover:border-zinc-300/80 transition-all duration-300 min-h-[380px]">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] flex flex-col justify-between hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 min-h-[380px] shadow-sm">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-2xl font-normal text-zinc-900 tracking-tight">Completed Tasks</h2>
+                <h2 className="text-2xl font-normal text-zinc-900 dark:text-zinc-100 tracking-tight">Completed Tasks</h2>
               </div>
-              <div className="text-right flex flex-col text-[11px] font-medium text-zinc-500 leading-tight">
+              <div className="text-right flex flex-col text-[11px] font-medium text-zinc-500 dark:text-zinc-400 leading-tight">
                 <span>24 Tasks Completed this</span>
                 <span>Week</span>
               </div>
@@ -266,29 +272,29 @@ export default function DashboardPage() {
                   />
 
                   {/* Day Name */}
-                  <span className="text-xs font-bold text-zinc-400">{dayData.day}</span>
+                  <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500">{dayData.day}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Private Task Placeholder */}
-          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 flex flex-col items-center justify-center text-center space-y-2 min-h-[160px]">
-            <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-500">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] flex flex-col items-center justify-center text-center space-y-2 min-h-[160px] shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-white/[0.06] flex items-center justify-center text-zinc-500 dark:text-zinc-400">
               <Plus className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-normal text-zinc-800">Private Task</h3>
-            <p className="text-xs text-zinc-400">Personal to-do items visible only to you</p>
+            <h3 className="text-sm font-normal text-zinc-800 dark:text-zinc-200">Private Task</h3>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">Personal to-do items visible only to you</p>
           </div>
         </div>
 
         {/* Right Column: Ongoing Projects & Recent Chats */}
         <div className="space-y-6 flex flex-col">
           {/* Ongoing Projects */}
-          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 space-y-5 hover:border-zinc-300/80 transition-all duration-300">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] space-y-5 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-normal text-zinc-900 font-funnel">Ongoing Projects</h2>
-              <button className="text-xs font-normal text-zinc-800 border border-zinc-300/90 px-3 py-1 rounded-full hover:bg-zinc-50 transition-colors flex items-center gap-1">
+              <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100 font-funnel">Ongoing Projects</h2>
+              <button className="text-xs font-normal text-zinc-800 dark:text-zinc-300 border border-zinc-300/90 dark:border-white/[0.12] px-3 py-1 rounded-full hover:bg-zinc-50 dark:hover:bg-white/[0.06] transition-colors flex items-center gap-1">
                 New <ArrowUpRight className="w-3 h-3" />
               </button>
             </div>
@@ -298,8 +304,8 @@ export default function DashboardPage() {
                 <div key={proj.name} className="flex items-center gap-4 py-0.5 cursor-pointer group">
                   {proj.icon}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base font-normal text-zinc-900 truncate font-funnel group-hover:text-zinc-700 transition-colors">{proj.name}</h4>
-                    <p className="text-xs text-zinc-400 font-normal font-sans">Due Date, {proj.dueDate}</p>
+                    <h4 className="text-base font-normal text-zinc-900 dark:text-zinc-100 truncate font-funnel group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors">{proj.name}</h4>
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500 font-normal font-sans">Due Date, {proj.dueDate}</p>
                   </div>
                 </div>
               ))}
@@ -307,31 +313,31 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Chats */}
-          <div className="bg-white rounded-3xl p-5 border border-zinc-200/80 space-y-4 flex-1 hover:border-zinc-300/80 transition-all duration-300">
-            <h2 className="text-lg font-normal text-zinc-900">Recent Chats</h2>
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] space-y-4 flex-1 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm">
+            <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Recent Chats</h2>
             <div className="space-y-3">
               {recentChats.map((chat) => (
-                <div key={chat.name} className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-50/50 border border-zinc-100/50 hover:bg-zinc-100/60 transition-all cursor-pointer hover:scale-[1.01] group/chat">
+                <div key={chat.name} className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-50/50 dark:bg-white/[0.03] border border-zinc-100/50 dark:border-white/[0.06] hover:bg-zinc-100/60 dark:hover:bg-white/[0.07] transition-all cursor-pointer hover:scale-[1.01] group/chat">
                   {/* Avatar with Presence Indicator */}
                   <div className="relative flex-shrink-0">
                     <div className={`w-9 h-9 rounded-full ${chat.avatarBg} flex items-center justify-center text-xs font-black`}>
                       {chat.name.split(' ').map(n => n[0]).join('')}
                     </div>
                     {chat.status === 'online' && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#16191e] animate-pulse" />
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-normal text-zinc-900 truncate pr-2">{chat.name}</h4>
+                      <h4 className="text-xs font-normal text-zinc-900 dark:text-zinc-100 truncate pr-2">{chat.name}</h4>
                       {chat.unreadCount > 0 && (
                         <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-white text-[9px] font-black">
                           {chat.unreadCount}
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-zinc-400 font-medium truncate mt-0.5 group-hover/chat:text-zinc-600 transition-colors">{chat.msg}</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium truncate mt-0.5 group-hover/chat:text-zinc-600 dark:group-hover/chat:text-zinc-300 transition-colors">{chat.msg}</p>
                   </div>
                 </div>
               ))}

@@ -225,12 +225,18 @@ export default function WorkspaceOverviewPage({
     if (!workspace?.members) return [];
     if (!searchMember.trim()) return workspace.members;
     const q = searchMember.toLowerCase();
-    return workspace.members.filter(
-      (m) =>
+    return workspace.members.filter((m) => {
+      const isCurrent = m.userId === userId;
+      const name = isCurrent ? (user?.fullName || m.name || '') : (m.name || '');
+      const email = isCurrent ? (user?.primaryEmailAddress?.emailAddress || m.email || '') : (m.email || '');
+      return (
         m.userId.toLowerCase().includes(q) ||
-        m.role.toLowerCase().includes(q)
-    );
-  }, [workspace, searchMember]);
+        m.role.toLowerCase().includes(q) ||
+        name.toLowerCase().includes(q) ||
+        email.toLowerCase().includes(q)
+      );
+    });
+  }, [workspace, searchMember, userId, user]);
 
   if (isLoading) {
     return (
@@ -288,7 +294,7 @@ export default function WorkspaceOverviewPage({
       </div>
 
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-zinc-200/80 shadow-sm relative overflow-hidden">
+      <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-zinc-200/80 dark:border-white/[0.08] shadow-sm relative overflow-hidden transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
             {/* Workspace Avatar */}
@@ -298,11 +304,11 @@ export default function WorkspaceOverviewPage({
 
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
+                <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
                   {workspace.name}
                 </h1>
                 {/* Privacy Badge */}
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                   {workspace.isPrivate ? (
                     <>
                       <Lock className="w-3 h-3 text-amber-500" />
@@ -317,17 +323,17 @@ export default function WorkspaceOverviewPage({
                 </span>
                 {/* Active Indicator */}
                 {isCurrentActive && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Active Workspace</span>
                   </span>
                 )}
               </div>
-              <p className="text-xs text-zinc-500 max-w-xl">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xl">
                 {workspace.description || 'No description provided for this workspace.'}
               </p>
-              <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1">
-                <span>Slug: <strong className="text-zinc-600 font-mono">/{workspace.slug}</strong></span>
+              <div className="flex items-center gap-4 text-xs text-zinc-400 dark:text-zinc-500 pt-1">
+                <span>Slug: <strong className="text-zinc-600 dark:text-zinc-300 font-mono">/{workspace.slug}</strong></span>
                 <span>•</span>
                 <span>Role: <strong className="text-[#3cae81] capitalize">{currentUserRole || 'Member'}</strong></span>
               </div>
@@ -335,8 +341,8 @@ export default function WorkspaceOverviewPage({
           </div>
 
           {/* Join Code Widget */}
-          <div className="bg-[#16191e] rounded-2xl p-4 text-white sm:min-w-[240px] shadow-inner border border-zinc-800 flex flex-col justify-between">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+          <div className="bg-[#16191e]/90 dark:bg-[#121620]/90 backdrop-blur-md rounded-2xl p-4 text-white sm:min-w-[240px] shadow-inner border border-zinc-800 dark:border-white/[0.08] flex flex-col justify-between">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-800 dark:border-white/[0.08]">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                 Workspace Invite Code
               </span>
@@ -349,17 +355,12 @@ export default function WorkspaceOverviewPage({
               </span>
               <button
                 onClick={handleCopyCode}
-                className={cn(
-                  'px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all',
-                  copiedCode
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-                )}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors flex items-center gap-1 shadow-sm"
               >
                 {copiedCode ? (
                   <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Copied!</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400 font-semibold">Copied</span>
                   </>
                 ) : (
                   <>
@@ -369,28 +370,40 @@ export default function WorkspaceOverviewPage({
                 )}
               </button>
             </div>
-            <p className="text-[10px] text-zinc-500">
-              Share with colleagues to join this workspace.
-            </p>
+
+            <div className="pt-2 border-t border-zinc-800/80 dark:border-white/[0.06] flex items-center justify-between text-[11px] text-zinc-400">
+              <span>Quick Link</span>
+              <button
+                onClick={async () => {
+                  const url = `${window.location.origin}/workspaces/${workspace._id}`;
+                  await navigator.clipboard.writeText(url);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="text-xs text-[#8be6c1] hover:underline flex items-center gap-1"
+              >
+                {copiedLink ? 'Link Copied!' : 'Copy Link'}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2 mt-8 pt-4 border-t border-zinc-100">
+        <div className="flex items-center gap-2 mt-8 pt-4 border-t border-zinc-100 dark:border-white/[0.08]">
           <button
             onClick={() => setActiveTab('roster')}
             className={cn(
               'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all',
               activeTab === 'roster'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+                ? 'bg-zinc-900 dark:bg-white/[0.1] text-white shadow-sm border border-transparent dark:border-white/[0.1]'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-white/[0.05]'
             )}
           >
             <Users className="w-3.5 h-3.5" />
             <span>Members & Roster</span>
             <span className={cn(
               'px-1.5 py-0.2 rounded-full text-[10px]',
-              activeTab === 'roster' ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-200 text-zinc-700'
+              activeTab === 'roster' ? 'bg-zinc-800 dark:bg-white/[0.1] text-zinc-300' : 'bg-zinc-200 dark:bg-white/[0.06] text-zinc-700 dark:text-zinc-300'
             )}>
               {workspace.members.length}
             </span>
@@ -401,8 +414,8 @@ export default function WorkspaceOverviewPage({
             className={cn(
               'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all',
               activeTab === 'settings'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
+                ? 'bg-zinc-900 dark:bg-white/[0.1] text-white shadow-sm border border-transparent dark:border-white/[0.1]'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-white/[0.05]'
             )}
           >
             <Settings2 className="w-3.5 h-3.5" />
@@ -411,13 +424,13 @@ export default function WorkspaceOverviewPage({
         </div>
       </div>
 
-      {/* Tab Content: Members & Roster */}
+      {/* Tab Content: Member Roster */}
       {activeTab === 'roster' && (
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-zinc-200/80 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-zinc-200/80 dark:border-white/[0.08] shadow-sm space-y-6 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold text-zinc-900">Workspace Members</h2>
-              <p className="text-xs text-zinc-500">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Workspace Members</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 All teammates with access to projects and discussions in this workspace.
               </p>
             </div>
@@ -430,7 +443,7 @@ export default function WorkspaceOverviewPage({
                 placeholder="Filter members..."
                 value={searchMember}
                 onChange={(e) => setSearchMember(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1]"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1]"
               />
             </div>
           </div>
@@ -439,35 +452,66 @@ export default function WorkspaceOverviewPage({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-zinc-200 text-zinc-400 uppercase tracking-wider text-[10px]">
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 uppercase tracking-wider text-[10px]">
                   <th className="pb-3 font-semibold">User</th>
                   <th className="pb-3 font-semibold">Role</th>
                   <th className="pb-3 font-semibold">Joined Date</th>
                   {isAdmin && <th className="pb-3 font-semibold text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {filteredMembers.map((member) => {
                   const isCurrent = member.userId === userId;
                   const isOwnerMember = member.role === 'owner';
+
+                  const displayName = isCurrent
+                    ? (user?.fullName || user?.firstName || member.name || 'You')
+                    : (member.name || `User (${member.userId.slice(0, 8)}...)`);
+
+                  const displayEmail = isCurrent
+                    ? (user?.primaryEmailAddress?.emailAddress || member.email || member.userId)
+                    : (member.email || member.userId);
+
+                  const avatarUrl = isCurrent
+                    ? (user?.imageUrl || member.imageUrl)
+                    : member.imageUrl;
+
+                  const initials = displayName
+                    .replace(/[^a-zA-Z0-9 ]/g, '')
+                    .trim()
+                    .split(/\s+/)
+                    .map((p) => p[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase() || 'U';
+
                   return (
-                    <tr key={member.userId} className="hover:bg-zinc-50/70 transition-colors">
+                    <tr key={member.userId} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/40 transition-colors">
                       {/* User Info */}
                       <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-zinc-800 text-[#d8f870] font-bold text-xs flex items-center justify-center shrink-0">
-                            {member.userId.slice(-2).toUpperCase()}
-                          </div>
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={displayName}
+                              className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-zinc-200 dark:ring-white/10"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 dark:bg-zinc-700 text-[#d8f870] font-bold text-xs flex items-center justify-center shrink-0">
+                              {initials}
+                            </div>
+                          )}
                           <div>
-                            <p className="font-semibold text-zinc-900 flex items-center gap-1.5">
-                              <span>User ({member.userId.slice(0, 10)}...)</span>
+                            <p className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                              <span>{displayName}</span>
                               {isCurrent && (
-                                <span className="px-1.5 py-0.2 rounded-full bg-[#d8f870]/30 text-zinc-800 text-[10px] font-bold">
+                                <span className="px-1.5 py-0.5 rounded-full bg-[#d8f870]/30 text-zinc-800 dark:text-[#d8f870] text-[10px] font-bold">
                                   You
                                 </span>
                               )}
                             </p>
-                            <p className="text-[11px] text-zinc-400 font-mono">{member.userId}</p>
+                            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">{displayEmail}</p>
                           </div>
                         </div>
                       </td>
@@ -478,25 +522,25 @@ export default function WorkspaceOverviewPage({
                           className={cn(
                             'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold capitalize',
                             member.role === 'owner'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               : member.role === 'admin'
-                              ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                              : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+                              ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700'
                           )}
                         >
                           {member.role === 'owner' ? (
-                            <Shield className="w-3 h-3 text-amber-600" />
+                            <Shield className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                           ) : member.role === 'admin' ? (
-                            <ShieldCheck className="w-3 h-3 text-indigo-600" />
+                            <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                           ) : (
-                            <UserCheck className="w-3 h-3 text-zinc-500" />
+                            <UserCheck className="w-3 h-3 text-zinc-500 dark:text-zinc-400" />
                           )}
                           <span>{member.role}</span>
                         </span>
                       </td>
 
                       {/* Joined Date */}
-                      <td className="py-3.5 pr-4 text-zinc-500">
+                      <td className="py-3.5 pr-4 text-zinc-500 dark:text-zinc-400">
                         {new Date(member.joinedAt).toLocaleDateString(undefined, {
                           year: 'numeric',
                           month: 'short',
@@ -511,12 +555,12 @@ export default function WorkspaceOverviewPage({
                             <button
                               onClick={() => handleRemoveMember(member.userId)}
                               disabled={isRemovingMember === member.userId}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors disabled:opacity-50"
                             >
                               {isRemovingMember === member.userId ? 'Removing...' : 'Remove'}
                             </button>
                           ) : (
-                            <span className="text-zinc-300 text-[11px]">—</span>
+                            <span className="text-zinc-300 dark:text-zinc-600 text-[11px]">—</span>
                           )}
                         </td>
                       )}
@@ -533,24 +577,24 @@ export default function WorkspaceOverviewPage({
       {activeTab === 'settings' && (
         <div className="space-y-6">
           {/* General Settings */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-zinc-200/80 shadow-sm space-y-6">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-zinc-200/80 dark:border-white/[0.08] shadow-sm space-y-6 transition-colors">
             <div>
-              <h2 className="text-lg font-bold text-zinc-900">General Settings</h2>
-              <p className="text-xs text-zinc-500">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">General Settings</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Update details for this workspace. Only workspace admins can make edits.
               </p>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-5 max-w-xl">
               {settingsSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>Workspace settings updated successfully!</span>
                 </div>
               )}
 
               {settingsError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
                   <span>{settingsError}</span>
                 </div>
@@ -558,7 +602,7 @@ export default function WorkspaceOverviewPage({
 
               {/* Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-800">
+                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                   Workspace Name
                 </label>
                 <input
@@ -567,13 +611,13 @@ export default function WorkspaceOverviewPage({
                   disabled={!isAdmin}
                   value={settingsName}
                   onChange={(e) => setSettingsName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs text-zinc-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-[#1b1f26] text-xs text-zinc-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-[#1b1f26] focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
                 />
               </div>
 
               {/* Description */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-800">
+                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                   Description
                 </label>
                 <textarea
@@ -582,12 +626,12 @@ export default function WorkspaceOverviewPage({
                   value={settingsDesc}
                   onChange={(e) => setSettingsDesc(e.target.value)}
                   placeholder="Describe your workspace goals or team function..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs text-zinc-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1] disabled:opacity-60 disabled:cursor-not-allowed transition-all resize-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-[#1b1f26] text-xs text-zinc-900 dark:text-zinc-100 focus:bg-white dark:focus:bg-[#1b1f26] focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1] disabled:opacity-60 disabled:cursor-not-allowed transition-all resize-none"
                 />
               </div>
 
               {/* Privacy Setting */}
-              <div className="p-4 rounded-2xl border border-zinc-200 bg-zinc-50/60 flex items-center justify-between">
+              <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-[#1b1f26] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {settingsIsPrivate ? (
                     <Lock className="w-4 h-4 text-amber-500 shrink-0" />
@@ -595,10 +639,10 @@ export default function WorkspaceOverviewPage({
                     <Globe className="w-4 h-4 text-emerald-500 shrink-0" />
                   )}
                   <div>
-                    <p className="text-xs font-semibold text-zinc-800">
+                    <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                       {settingsIsPrivate ? 'Private Workspace' : 'Public Workspace'}
                     </p>
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                       {settingsIsPrivate
                         ? 'Restricted to explicit members and join code holders.'
                         : 'Discoverable to members inside the system.'}
@@ -611,11 +655,11 @@ export default function WorkspaceOverviewPage({
                     type="button"
                     onClick={() => setSettingsIsPrivate(!settingsIsPrivate)}
                     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      settingsIsPrivate ? 'bg-[#3cae81]' : 'bg-zinc-300'
+                      settingsIsPrivate ? 'bg-[#3cae81]' : 'bg-zinc-300 dark:bg-zinc-700'
                     }`}
                   >
                     <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white dark:bg-zinc-950 shadow-md ring-0 transition duration-200 ease-in-out ${
                         settingsIsPrivate ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
@@ -643,19 +687,19 @@ export default function WorkspaceOverviewPage({
           </div>
 
           {/* Danger Zone */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-rose-200/80 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-rose-600">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-rose-200/80 dark:border-rose-900/40 shadow-sm space-y-4 transition-colors">
+            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="w-5 h-5" />
               <h2 className="text-base font-bold">Danger Zone</h2>
             </div>
 
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {/* Leave Workspace (For non-owners) */}
               {!isOwner && (
                 <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xs font-bold text-zinc-900">Leave Workspace</h3>
-                    <p className="text-xs text-zinc-500">
+                    <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Leave Workspace</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       Revoke your membership and access to this workspace.
                     </p>
                   </div>
@@ -664,7 +708,7 @@ export default function WorkspaceOverviewPage({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setShowLeaveConfirm(false)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-600 hover:bg-zinc-100"
+                        className="px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       >
                         Cancel
                       </button>
@@ -680,7 +724,7 @@ export default function WorkspaceOverviewPage({
                   ) : (
                     <button
                       onClick={() => setShowLeaveConfirm(true)}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50 transition-colors"
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                     >
                       Leave Workspace
                     </button>
@@ -692,8 +736,8 @@ export default function WorkspaceOverviewPage({
               {isOwner && (
                 <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-xs font-bold text-zinc-900">Delete Workspace</h3>
-                    <p className="text-xs text-zinc-500">
+                    <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Delete Workspace</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       Permanently delete this workspace and remove all associated projects and tasks.
                     </p>
                   </div>
@@ -702,7 +746,7 @@ export default function WorkspaceOverviewPage({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setShowDeleteConfirm(false)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-600 hover:bg-zinc-100"
+                        className="px-3 py-1.5 rounded-xl text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       >
                         Cancel
                       </button>
@@ -718,7 +762,7 @@ export default function WorkspaceOverviewPage({
                   ) : (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors"
+                      className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60 transition-colors"
                     >
                       Delete Workspace
                     </button>

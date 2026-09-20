@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { getAuth, clerkClient } from '@clerk/express';
 import {
   createWorkspaceSchema,
   joinWorkspaceSchema,
@@ -8,13 +9,21 @@ import {
 import { Workspace } from '../models/Workspace.js';
 import { generateJoinCode, slugify } from '../utils/workspace-helpers.js';
 
+const getUserId = (req: Request): string | undefined => {
+  try {
+    return (req as any).auth?.userId || getAuth(req)?.userId;
+  } catch {
+    return (req as any).auth?.userId;
+  }
+};
+
 /**
  * POST /api/v1/workspaces
  * Create a new workspace and assign caller as owner.
  */
 export async function createWorkspace(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -94,7 +103,7 @@ export async function createWorkspace(req: Request, res: Response) {
  */
 export async function getUserWorkspaces(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -127,7 +136,7 @@ export async function getUserWorkspaces(req: Request, res: Response) {
  */
 export async function getWorkspaceById(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     const { id } = req.params;
 
     const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };
@@ -153,9 +162,35 @@ export async function getWorkspaceById(req: Request, res: Response) {
       });
     }
 
+    // Enrich members with profile details from Clerk
+    const memberUserIds = workspace.members.map((m: any) => m.userId);
+    let clerkUsersMap: Record<string, { name?: string; email?: string; imageUrl?: string }> = {};
+    try {
+      const clerkUsers = await clerkClient.users.getUserList({ userId: memberUserIds, limit: 100 });
+      for (const u of clerkUsers.data) {
+        clerkUsersMap[u.id] = {
+          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || undefined,
+          email: u.emailAddresses?.[0]?.emailAddress,
+          imageUrl: u.imageUrl,
+        };
+      }
+    } catch (err) {
+      console.warn('[WorkspaceController] Could not fetch member details from Clerk:', err);
+    }
+
+    const enrichedMembers = workspace.members.map((m: any) => ({
+      ...m,
+      name: clerkUsersMap[m.userId]?.name,
+      email: clerkUsersMap[m.userId]?.email,
+      imageUrl: clerkUsersMap[m.userId]?.imageUrl,
+    }));
+
     return res.status(200).json({
       success: true,
-      data: workspace,
+      data: {
+        ...workspace,
+        members: enrichedMembers,
+      },
     });
   } catch (error: any) {
     console.error('[WorkspaceController] getWorkspaceById error:', error);
@@ -172,7 +207,7 @@ export async function getWorkspaceById(req: Request, res: Response) {
  */
 export async function joinWorkspace(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -247,7 +282,7 @@ export async function joinWorkspace(req: Request, res: Response) {
  */
 export async function updateWorkspace(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     const { id } = req.params;
 
     const parseResult = updateWorkspaceSchema.safeParse(req.body);
@@ -317,7 +352,7 @@ export async function updateWorkspace(req: Request, res: Response) {
  */
 export async function removeMember(req: Request, res: Response) {
   try {
-    const requesterId = (req as any).auth?.userId;
+    const requesterId = getUserId(req);
     const { id, userId: targetUserId } = req.params;
 
     const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };
@@ -393,7 +428,7 @@ export async function removeMember(req: Request, res: Response) {
  */
 export async function deleteWorkspace(req: Request, res: Response) {
   try {
-    const userId = (req as any).auth?.userId;
+    const userId = getUserId(req);
     const { id } = req.params;
 
     const query = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { slug: id };

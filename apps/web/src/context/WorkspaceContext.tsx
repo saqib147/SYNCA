@@ -77,6 +77,36 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [workspaces, setActiveWorkspace]
   );
 
+  // Helper to execute an API action with automatic token refresh on 401
+  const withAuth = useCallback(
+    async <T,>(action: (token: string) => Promise<T>): Promise<T> => {
+      let token = await getToken();
+      if (!token) {
+        // Try skipping cache if initial getToken is empty
+        token = await getToken({ skipCache: true });
+        if (!token) {
+          throw new Error('Your session has expired. Please sign in again.');
+        }
+      }
+
+      try {
+        return await action(token);
+      } catch (err: any) {
+        // If 401 UNAUTHORIZED, attempt to force-refresh token from Clerk and retry once
+        if (err?.status === 401 || err?.code === 'UNAUTHORIZED') {
+          console.warn('[WorkspaceContext] 401 received, attempting force token refresh...');
+          const freshToken = await getToken({ skipCache: true });
+          if (freshToken) {
+            return await action(freshToken);
+          }
+          throw new Error('Your session has expired. Please refresh the page or sign in again.');
+        }
+        throw err;
+      }
+    },
+    [getToken]
+  );
+
   // Fetch workspaces for the current authenticated user
   const loadWorkspaces = useCallback(async () => {
     if (!isSignedIn) {
@@ -89,13 +119,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true);
       setError(null);
-      const token = await getToken();
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
-
-      const list = await fetchUserWorkspaces(token);
+      const list = await withAuth((token) => fetchUserWorkspaces(token));
       setWorkspaces(list);
 
       // Restore active workspace from localStorage, or select first available
@@ -112,7 +136,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isSignedIn, getToken, setActiveWorkspace]);
+  }, [isSignedIn, withAuth, setActiveWorkspace]);
 
   // Load on auth state readiness
   useEffect(() => {
@@ -122,24 +146,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Create Workspace action
   const createWorkspace = useCallback(
     async (data: CreateWorkspaceInput): Promise<Workspace> => {
-      const token = await getToken();
-      if (!token) throw new Error('Authentication session required');
-
-      const created = await createWorkspaceApi(data, token);
+      const created = await withAuth((token) => createWorkspaceApi(data, token));
       setWorkspaces((prev) => [created, ...prev]);
       setActiveWorkspace(created);
       return created;
     },
-    [getToken, setActiveWorkspace]
+    [withAuth, setActiveWorkspace]
   );
 
   // Join Workspace action
   const joinWorkspace = useCallback(
     async (joinCode: string): Promise<Workspace> => {
-      const token = await getToken();
-      if (!token) throw new Error('Authentication session required');
-
-      const joined = await joinWorkspaceApi({ joinCode }, token);
+      const joined = await withAuth((token) => joinWorkspaceApi({ joinCode }, token));
       setWorkspaces((prev) => {
         const filtered = prev.filter((w) => w._id !== joined._id);
         return [joined, ...filtered];
@@ -147,33 +165,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setActiveWorkspace(joined);
       return joined;
     },
-    [getToken, setActiveWorkspace]
+    [withAuth, setActiveWorkspace]
   );
 
   // Update Workspace action
   const updateWorkspace = useCallback(
     async (id: string, data: UpdateWorkspaceInput): Promise<Workspace> => {
-      const token = await getToken();
-      if (!token) throw new Error('Authentication session required');
-
-      const updated = await updateWorkspaceApi(id, data, token);
+      const updated = await withAuth((token) => updateWorkspaceApi(id, data, token));
       setWorkspaces((prev) => prev.map((w) => (w._id === id ? updated : w)));
       if (activeWorkspace?._id === id) {
         setActiveWorkspace(updated);
       }
       return updated;
     },
-    [getToken, activeWorkspace, setActiveWorkspace]
+    [withAuth, activeWorkspace, setActiveWorkspace]
   );
 
   // Leave Workspace action
   const leaveWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
       if (!userId) throw new Error('User ID required');
-      const token = await getToken();
-      if (!token) throw new Error('Authentication session required');
-
-      await removeMemberApi(workspaceId, userId, token);
+      await withAuth((token) => removeMemberApi(workspaceId, userId, token));
       setWorkspaces((prev) => {
         const remaining = prev.filter((w) => w._id !== workspaceId);
         if (activeWorkspace?._id === workspaceId) {
@@ -182,16 +194,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return remaining;
       });
     },
-    [userId, getToken, activeWorkspace, setActiveWorkspace]
+    [userId, withAuth, activeWorkspace, setActiveWorkspace]
   );
 
   // Delete Workspace action
   const deleteWorkspace = useCallback(
     async (workspaceId: string): Promise<void> => {
-      const token = await getToken();
-      if (!token) throw new Error('Authentication session required');
-
-      await deleteWorkspaceApi(workspaceId, token);
+      await withAuth((token) => deleteWorkspaceApi(workspaceId, token));
       setWorkspaces((prev) => {
         const remaining = prev.filter((w) => w._id !== workspaceId);
         if (activeWorkspace?._id === workspaceId) {
@@ -200,7 +209,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return remaining;
       });
     },
-    [getToken, activeWorkspace, setActiveWorkspace]
+    [withAuth, activeWorkspace, setActiveWorkspace]
   );
 
   // Derived user roles & permissions in the active workspace

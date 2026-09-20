@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, KeyRound, Loader2, ArrowRight } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { joinWorkspaceSchema } from '@synca/zod-schemas';
@@ -12,14 +13,29 @@ interface JoinWorkspaceModalProps {
 
 export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps) {
   const { joinWorkspace } = useWorkspace();
+  const [mounted, setMounted] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Handle ESC key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !mounted) return null;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow alphanumeric, up to 6 characters, uppercase
     const cleaned = e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
     setJoinCode(cleaned);
     setError(null);
@@ -51,29 +67,32 @@ export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps)
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div 
-        className="w-full max-w-md bg-[#16191e] border border-zinc-800/80 rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden"
+        className="w-full max-w-md bg-[#16191e] border border-zinc-700/80 rounded-3xl p-6 sm:p-7 text-white shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Subtle background glow */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#8be6c1]/10 rounded-full blur-3xl pointer-events-none" />
+        {/* Ambient Top Glow */}
+        <div className="absolute -top-24 -left-24 w-52 h-52 bg-[#8be6c1]/12 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#8be6c1]/15 border border-[#8be6c1]/30 flex items-center justify-center text-[#8be6c1]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#8be6c1]/15 border border-[#8be6c1]/30 flex items-center justify-center text-[#8be6c1] shadow-sm">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-zinc-100">Join Workspace</h3>
+              <h3 className="text-base font-bold text-zinc-100">Join Workspace</h3>
               <p className="text-xs text-zinc-400">Enter a 6-character code to join your team</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -89,9 +108,9 @@ export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps)
           )}
 
           {/* Join Code Input */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300 block text-center">
-              Invite Code
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold text-zinc-300 block text-center">
+              Workspace Invite Code
             </label>
             <div className="flex justify-center">
               <input
@@ -101,11 +120,11 @@ export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps)
                 value={joinCode}
                 onChange={handleInputChange}
                 maxLength={6}
-                className="w-56 px-4 py-3 text-center tracking-[0.3em] font-mono text-xl font-bold uppercase rounded-2xl bg-[#1e232b] border border-zinc-800 text-[#d8f870] placeholder-zinc-600 focus:outline-none focus:border-[#d8f870] focus:ring-2 focus:ring-[#d8f870]/30 transition-all shadow-inner"
+                className="w-60 px-4 py-3.5 text-center tracking-[0.35em] font-mono text-2xl font-bold uppercase rounded-2xl bg-[#1b1f26] border border-zinc-700/80 text-[#d8f870] placeholder-zinc-600 focus:outline-none focus:border-[#8be6c1] focus:ring-2 focus:ring-[#8be6c1]/20 transition-all shadow-inner"
               />
             </div>
             <p className="text-[11px] text-zinc-400 text-center">
-              Ask your workspace admin for their 6-character invite code.
+              Ask your workspace admin for their 6-character code.
             </p>
           </div>
 
@@ -115,14 +134,14 @@ export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps)
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting || joinCode.length !== 6}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#8be6c1] hover:bg-[#7ce0b8] text-zinc-900 flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#8be6c1] hover:bg-[#7ce0b8] text-zinc-950 flex items-center gap-1.5 transition-all shadow-md shadow-[#8be6c1]/10 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               {isSubmitting ? (
                 <>
@@ -141,4 +160,6 @@ export function JoinWorkspaceModal({ isOpen, onClose }: JoinWorkspaceModalProps)
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

@@ -23,7 +23,7 @@
 | Layer | Technology / Choice | Details / Reason |
 |---|---|---|
 | **Architecture** | Monorepo (Turborepo) | Shared TypeScript types (`packages/types`), Zod schemas (`packages/zod-schemas`), apps `apps/web` & `apps/api` |
-| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS, Shadcn UI, Zustand (UI state), TanStack Query v5 (Server state), Tiptap, Recharts |
+| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), Shadcn UI, ThemeContext (`light` / `dark` / `system` with zero-FOUC script), Zustand (UI state), TanStack Query v5 (Server state), Tiptap, Recharts |
 | **Backend** | Express.js + Socket.io | Standalone Node.js Express server on Render for persistent WebSockets |
 | **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for rich tasks, channels, and milestones |
 | **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, and Socket.io multi-instance scaling |

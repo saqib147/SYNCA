@@ -100,3 +100,44 @@
    - Overview section: Project Brief, High-Level Goals, Key Milestones cards (`Completed`, `In Progress`, `Upcoming`), Connected Briefs files.
 4. **Chat & Messaging Screen** (`/chat/[userId]`):
    - 1:1 conversation view with speech bubbles, timestamp dividers (`Today`), rich text file attachment cards, contact profile right drawer (profile avatar, email, local time, shared media grid).
+
+---
+
+## 6. Dark Mode Tokens & Architecture Guidelines
+
+Synca implements full class-based dark mode (`darkMode: 'class'`) configured in `tailwind.config.js` and managed through `apps/web/src/context/ThemeContext.tsx`.
+
+### 6.1 Theme Rules & Persistence
+1. **Preferences**: Supports `'light' | 'dark' | 'system'`.
+2. **Storage**: Persisted in `localStorage` under key `synca_theme`.
+3. **Zero-FOUC**: Initial theme detection executes via a synchronous inline `<script>` in `apps/web/src/app/layout.tsx` before DOM paint.
+4. **OS Sync**: Listens to `window.matchMedia('(prefers-color-scheme: dark)')` when set to `system`.
+
+### 6.2 Token Pairing Guide for Future Components
+
+Always use paired Tailwind classes to ensure seamless light and dark mode parity across all new pages, widgets, and dialogs:
+
+| Element Role | Light Mode Class | Dark Mode Class | Notes |
+|---|---|---|---|
+| **App Canvas / Page BG** | `bg-[#f4f4f5]` | `dark:bg-[#000000]` | Pitch black `#000000` canvas with fixed subtle AI green radial gradients in `globals.css` |
+| **Card / Widget Surface** | `bg-white` | `dark:bg-[#10141e]/65 dark:backdrop-blur-xl` | Translucent iOS-style glass allowing ambient gradient to bleed through |
+| **Elevated / Secondary Box** | `bg-zinc-50` | `dark:bg-white/[0.04] dark:backdrop-blur-md` | Table headers, stat chips |
+| **Card Borders** | `border-zinc-200/80` | `dark:border-white/[0.08]` | Subtle translucent glass hairline borders |
+| **Primary Text** | `text-zinc-900` | `dark:text-zinc-100` | Headings, primary labels |
+| **Secondary Text** | `text-zinc-500` | `dark:text-zinc-400` | Subheadings, descriptions |
+| **Muted Text / Dates** | `text-zinc-400` | `dark:text-zinc-500` | Microcopy, timestamps |
+| **Form Inputs** | `bg-zinc-50 border-zinc-200` | `dark:bg-white/[0.05] dark:backdrop-blur-md dark:border-white/[0.08]` | Input controls & textareas |
+| **Primary Accent Lime** | `bg-[#d8f870] hover:bg-[#c4ea48]` | `dark:bg-[#d8f870] dark:hover:bg-[#c4ea48]` | Always pair with `text-zinc-900` or `text-zinc-950` |
+| **Sticky Note (Yellow)** | `bg-[#fef9c3] border-amber-200` | `dark:bg-amber-950/25 dark:backdrop-blur-md dark:border-amber-500/25` | Text: `text-amber-950 dark:text-amber-100` |
+| **Sticky Note (Peach)** | `bg-[#ffedd5] border-orange-200` | `dark:bg-orange-950/25 dark:backdrop-blur-md dark:border-orange-500/25` | Text: `text-orange-950 dark:text-orange-100` |
+| **Modals & Overlays** | `bg-white border-zinc-200` | `dark:bg-[#10141e]/90 dark:backdrop-blur-2xl dark:border-white/[0.12]` | Render via `createPortal(..., document.body)` with `bg-black/75` backdrop |
+| **Scrollbars** | 5px width, rounded pill | `dark:border-transparent` | Universal subtle translucent scrollbars via `globals.css` (`scrollbar-none` utility) |
+
+### 6.3 Standard Theme Toggle Component
+- Use `<ThemeToggle />` from `@/components/shared/ThemeToggle` for quick toggle buttons (supports `size="sm" | "md"`).
+- For complete multi-option selectors, use `useTheme()` hook:
+```tsx
+const { theme, setTheme } = useTheme();
+// theme is 'light' | 'dark' | 'system'
+```
+

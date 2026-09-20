@@ -5,9 +5,45 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Dark Mode & Theme Architecture] - 2026-09-20
+
+### Added
+- **System-Wide Light & Dark Mode Architecture**:
+  - Configured class-based dark mode (`darkMode: 'class'`) across Tailwind CSS configuration in `apps/web/tailwind.config.js`.
+  - Created `ThemeContext` and `ThemeProvider` in `apps/web/src/context/ThemeContext.tsx` with full support for `'light' | 'dark' | 'system'` modes, `localStorage` persistence (`synca_theme`), and OS `prefers-color-scheme` media query listeners.
+  - Implemented zero-FOUC (Flash of Unstyled Content) synchronous inline script in `apps/web/src/app/layout.tsx` before DOM paint.
+  - Built interactive animated `<ThemeToggle />` component (`apps/web/src/components/shared/ThemeToggle.tsx`) with Sun/Moon micro-animations and size variants (`sm` and `md`).
+  - Mounted `<ThemeToggle />` in:
+    - `TopBar.tsx`: Accessible from any app page.
+    - `WorkspaceSwitcher.tsx`: Quick toggle directly inside the user & workspace flyout menu.
+    - `dashboard/page.tsx`: In the top stat greeting chip bar.
+    - `settings/page.tsx`: Dedicated "Appearance & Theme" selection card supporting Light, Dark, and System Sync.
+  - Upgraded all pages and components with high-fidelity dark mode tokens:
+    - Base canvas: `bg-[#f4f4f5]` in Light mode / pure `#000000` pitch black in Dark mode with fixed, subtle AI-style ambient radial green/lime/mint gradients (`radial-gradient` in `globals.css`).
+    - Primary card surfaces: `bg-white` / `dark:bg-[#10141e]/65 dark:backdrop-blur-xl dark:border-white/[0.08]` translucent iOS-style glass allowing the ambient green glow to bleed through.
+    - Menus and flyouts: `dark:bg-[#10141e]/90 dark:backdrop-blur-2xl dark:border-white/[0.12]`.
+    - Sticky cards (`TaskCard.tsx`): yellow (`dark:bg-amber-950/25`), peach (`dark:bg-orange-950/25`), and white (`dark:bg-white/[0.04]`), all with `backdrop-blur-md`.
+    - Universal sleek scrollbar styling in `globals.css` (5px rounded pill thumb, transparent track, zero native Windows gray/white bar intrusion, plus `.scrollbar-none` utility).
+    - `chats/page.tsx`: Translucent dark glass container, bubbles, attachment cards, and right contact profile drawer.
+    - `workspaces/[id]/page.tsx`: Translucent dark glass banner, join code widget, members roster table, and settings danger zone.
+    - `projects/page.tsx`: Translucent dark glass filter dropdowns, project cards, and new project placeholder.
+  - Added section **6. Dark Mode Tokens & Architecture Guidelines** to `docs/design-system.md` detailing standard token pairings for all future phases.
+
+### Fixed
+- Fixed unsightly default Windows scrollbars cutting through rounded cards by adding universal sleek 5px transparent track scrollbars and a `.scrollbar-none` utility class.
+- Fixed flyout menu transparency bleed where dashboard text showed through the popover by giving it a solid opaque obsidian background (`bg-[#0b0e14]`), solid user profile header, and rich drop shadow (`shadow-[0_20px_60px_rgba(0,0,0,0.9)]`).
+- Fixed Clerk session token verification in `apps/api/src/middleware/auth.middleware.ts` by using `getAuth(req)` from `@clerk/express` to resolve user session claims and attach them to `req.auth`.
+- Added explicit `publishableKey` and `secretKey` configuration to `clerkMiddleware()` in `apps/api/src/app.ts` along with early environment variable loading.
+- Enhanced backend auth middleware with detailed diagnostic logging on unauthenticated requests.
+- Added automatic 401 retry resilience in `apps/web/src/context/WorkspaceContext.tsx` via `withAuth()` helper, automatically fetching a fresh session token (`getToken({ skipCache: true })`) from Clerk if the client session was idle or expired before displaying an error.
+- Fixed workspace member roster display: replaced raw Clerk user ID placeholder labels (`User (user_3H8lE...)`, `user_...`, and ID-slice initials `YT`) with the user's actual profile photo, full name (`Saqib Arshad`), email address, and proper initials. Enriched backend `getWorkspaceById` with Clerk user profiles (`clerkClient.users.getUserList`).
+
 ## [Phase 2 - Workspace Management] - 2026-07-28
 
 ### Added
+- Upgraded **User Profile & Workspace Switcher Header**:
+  - Merged the separate User Profile card and Workspace card into a unified header card showing avatar, user name, and active workspace with interactive status indicators.
+  - Built a sleek flyout popover menu opening to the right (`left-[calc(100%+0.75rem)]`) containing user profile details, email, interactive workspace switcher with checkmarks, quick actions ("Create Workspace", "Join with Code", "Manage Workspace"), settings shortcut, and sign-out trigger.
 - Completed **Phase 2 — Step 6: Dedicated Workspace Overview Page & Phase 2 Milestone**:
   - Implemented the dedicated `/workspaces/[id]` route (`apps/web/src/app/(app)/workspaces/[id]/page.tsx`) with dynamic ID/slug resolution, breadcrumb navigation, and responsive header banner.
   - Built an interactive **Invite Code Widget** with one-click clipboard copying (`navigator.clipboard.writeText`) and animated checkmark feedback.
@@ -15,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Built the **Workspace Settings** tab allowing workspace admins/owners to update name, description, and toggle privacy (Public vs. Private) with live feedback.
   - Built the **Danger Zone** with role-gated Leave Workspace (non-owners) and Delete Workspace (owners) workflows featuring safety confirmation states.
   - Phase 2 (Workspace Management) is **100% Complete**!
+
+### Fixed
+- Fixed modal stacking context and clipping bug where Task Cards overlapped modal dialogs:
+  - Upgraded `CreateWorkspaceModal` and `JoinWorkspaceModal` to render using React Portals (`createPortal(..., document.body)`).
+  - Assigned `z-[9999]` with rich darkened backdrop blur (`bg-black/75 backdrop-blur-md`) and zoom-in entrance animation.
+  - Added `z-30` to Sidebar container and click-outside/Escape-key dismissal handlers.
 - Completed **Phase 2 — Step 5: Create & Join Workspace Modals**:
   - Implemented `CreateWorkspaceModal` (`apps/web/src/components/workspace/CreateWorkspaceModal.tsx`) with client-side Zod validation (`createWorkspaceSchema`), workspace name, description, privacy toggle (Public vs. Private), loading spinner, and error state handling.
   - Implemented `JoinWorkspaceModal` (`apps/web/src/components/workspace/JoinWorkspaceModal.tsx`) featuring a 6-character monospace invite code input, automatic uppercase filtering, Zod schema validation, and immediate workspace activation on join.
