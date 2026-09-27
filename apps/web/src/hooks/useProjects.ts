@@ -5,13 +5,13 @@ import { useAuth } from '@clerk/nextjs';
 import { Project } from '@synca/types';
 import { CreateProjectInput, UpdateProjectInput } from '@synca/zod-schemas';
 import {
-  fetchWorkspaceProjects,
+  fetchUserProjects,
+  joinProjectApi,
   createProjectApi,
   updateProjectApi,
   deleteProjectApi,
   ProjectFilters,
 } from '@/lib/api/project.api';
-import { useWorkspace } from '@/hooks/useWorkspace';
 
 export const notifyProjectsChanged = () => {
   if (typeof window !== 'undefined') {
@@ -19,10 +19,8 @@ export const notifyProjectsChanged = () => {
   }
 };
 
-export function useProjects(customWorkspaceId?: string) {
+export function useProjects() {
   const { getToken, isSignedIn } = useAuth();
-  const { activeWorkspace } = useWorkspace();
-  const workspaceId = customWorkspaceId || activeWorkspace?._id;
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -52,10 +50,10 @@ export function useProjects(customWorkspaceId?: string) {
     [getToken]
   );
 
-  // Load projects
+  // Load projects user is a member of
   const loadProjects = useCallback(
     async (filters?: ProjectFilters) => {
-      if (!isSignedIn || !workspaceId) {
+      if (!isSignedIn) {
         setProjects([]);
         setIsLoading(false);
         return;
@@ -64,9 +62,7 @@ export function useProjects(customWorkspaceId?: string) {
       try {
         setIsLoading(true);
         setError(null);
-        const list = await withAuth((token) =>
-          fetchWorkspaceProjects(workspaceId, token, filters)
-        );
+        const list = await withAuth((token) => fetchUserProjects(token, filters));
         setProjects(list);
       } catch (err: any) {
         console.error('[useProjects] Failed to load projects:', err);
@@ -75,7 +71,7 @@ export function useProjects(customWorkspaceId?: string) {
         setIsLoading(false);
       }
     },
-    [isSignedIn, workspaceId, withAuth]
+    [isSignedIn, withAuth]
   );
 
   useEffect(() => {
@@ -94,19 +90,28 @@ export function useProjects(customWorkspaceId?: string) {
   // Create Project
   const createProject = useCallback(
     async (data: CreateProjectInput): Promise<Project> => {
-      if (!workspaceId) throw new Error('No active workspace selected');
-
-      const payload = {
-        ...data,
-        workspaceId: data.workspaceId || workspaceId,
-      };
-
-      const created = await withAuth((token) => createProjectApi(payload, token));
+      const created = await withAuth((token) => createProjectApi(data, token));
       setProjects((prev) => [created, ...prev]);
       notifyProjectsChanged();
       return created;
     },
-    [workspaceId, withAuth]
+    [withAuth]
+  );
+
+  // Join Project by 6-character Join Code
+  const joinProject = useCallback(
+    async (joinCode: string): Promise<Project> => {
+      const joined = await withAuth((token) => joinProjectApi(joinCode, token));
+      setProjects((prev) => {
+        if (prev.some((p) => p._id === joined._id)) {
+          return prev.map((p) => (p._id === joined._id ? joined : p));
+        }
+        return [joined, ...prev];
+      });
+      notifyProjectsChanged();
+      return joined;
+    },
+    [withAuth]
   );
 
   // Update Project
@@ -136,6 +141,7 @@ export function useProjects(customWorkspaceId?: string) {
     error,
     refreshProjects: loadProjects,
     createProject,
+    joinProject,
     updateProject,
     deleteProject,
   };

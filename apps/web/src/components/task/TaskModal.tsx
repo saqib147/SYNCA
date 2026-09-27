@@ -25,7 +25,6 @@ interface TaskModalProps {
   task?: Task | null;
   defaultStatus?: string;
   projectId?: string;
-  workspaceId?: string;
   members?: Array<{ userId: string; name?: string; email?: string; imageUrl?: string }>;
 }
 
@@ -36,7 +35,6 @@ export function TaskModal({
   task,
   defaultStatus = 'To Do',
   projectId,
-  workspaceId,
   members = [],
 }: TaskModalProps) {
   const [mounted, setMounted] = useState(false);
@@ -130,7 +128,6 @@ export function TaskModal({
       setError(null);
 
       await onSave({
-        workspaceId,
         projectId: projectId || null,
         title: title.trim(),
         description: description.trim() || undefined,

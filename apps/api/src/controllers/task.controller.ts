@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { getAuth, clerkClient } from '@clerk/express';
-import { createTaskSchema, updateTaskSchema, moveTaskSchema } from '@synca/zod-schemas';
+import { createTaskSchema, updateTaskSchema, moveTaskSchema, addCommentSchema } from '@synca/zod-schemas';
 import { Task } from '../models/Task.js';
 import { Project } from '../models/Project.js';
-import { Workspace } from '../models/Workspace.js';
 
 const getUserId = (req: Request): string | undefined => {
   try {
@@ -13,6 +12,17 @@ const getUserId = (req: Request): string | undefined => {
     return (req as any).auth?.userId;
   }
 };
+
+function isProjectAdminOrMod(project: any, userId: string): boolean {
+  if (!project) return false;
+  if (project.ownerId === userId) return true;
+  if (project.members && Array.isArray(project.members)) {
+    return project.members.some(
+      (m: any) => m.userId === userId && (m.role === 'Admin' || m.role === 'Moderator')
+    );
+  }
+  return false;
+}
 
 /**
  * POST /api/v1/tasks
@@ -44,7 +54,6 @@ export async function createTask(req: Request, res: Response) {
     }
 
     const {
-      workspaceId,
       projectId,
       title,
       description,
@@ -56,62 +65,30 @@ export async function createTask(req: Request, res: Response) {
       isPrivate,
     } = parseResult.data;
 
-    let targetWorkspaceId = workspaceId;
-
-    // If projectId is supplied, derive workspaceId from project
     if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
-      const project = await Project.findById(projectId).lean();
+      const project = await Project.findOne({ _id: projectId, deletedAt: null }).lean();
       if (!project) {
         return res.status(404).json({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Project not found' },
         });
       }
-      targetWorkspaceId = project.workspaceId.toString();
-    }
 
-    if (!targetWorkspaceId || !mongoose.Types.ObjectId.isValid(targetWorkspaceId)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid workspaceId is required' },
-      });
-    }
+      const isMember =
+        project.ownerId === userId ||
+        (project.members && project.members.some((m) => m.userId === userId)) ||
+        project.teamMembers?.includes(userId);
 
-    // Verify caller belongs to the workspace
-    const workspace = await Workspace.findById(targetWorkspaceId).lean();
-    if (!workspace) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Workspace not found' },
-      });
-    }
-
-    const callerMember = workspace.members.find((m) => m.userId === userId);
-    if (!callerMember) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'You must be a member of this workspace to create tasks' },
-      });
-    }
-
-    const isPrivileged = callerMember.role === 'owner' || callerMember.role === 'admin' || workspace.ownerId === userId;
-
-    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
-      const project = await Project.findById(projectId).lean();
-      if (project) {
-        const isTeamMember = project.teamMembers?.includes(userId);
-        if (!isTeamMember && !isPrivileged) {
-          return res.status(403).json({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'Only project team members or workspace admins can create tasks for this project' },
-          });
-        }
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You must be a member of this project to create tasks' },
+        });
       }
     }
 
-    // Determine highest order for this column so the new task goes to the end
+    // Determine highest order for this column
     const lastTask = await Task.findOne({
-      workspaceId: targetWorkspaceId,
       projectId: projectId || null,
       status: status || 'To Do',
       deletedAt: null,
@@ -122,7 +99,6 @@ export async function createTask(req: Request, res: Response) {
     const nextOrder = lastTask ? (lastTask.order || 0) + 1 : 0;
 
     const newTask = await Task.create({
-      workspaceId: targetWorkspaceId,
       projectId: projectId || null,
       createdBy: userId,
       title,
@@ -171,7 +147,7 @@ export async function getProjectTasks(req: Request, res: Response) {
       });
     }
 
-    const project = await Project.findById(projectId).lean();
+    const project = await Project.findOne({ _id: projectId, deletedAt: null }).lean();
     if (!project) {
       return res.status(404).json({
         success: false,
@@ -179,39 +155,39 @@ export async function getProjectTasks(req: Request, res: Response) {
       });
     }
 
-    // Verify workspace membership and project privacy
-    const workspace = await Workspace.findById(project.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    if (!callerMember) {
+    const isMember =
+      project.ownerId === userId ||
+      (project.members && project.members.some((m) => m.userId === userId)) ||
+      project.teamMembers?.includes(userId);
+
+    if (!isMember) {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Access denied to project tasks' },
       });
     }
 
-    const isPrivileged = callerMember.role === 'owner' || callerMember.role === 'admin' || workspace?.ownerId === userId;
-    const isTeamMember = project.teamMembers?.includes(userId);
-
-    if (!isTeamMember && !isPrivileged) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Only assigned project team members or workspace admins can view project tasks' },
-      });
-    }
+    const isAdminOrMod = isProjectAdminOrMod(project, userId);
 
     const query: any = {
       projectId,
       deletedAt: null,
     };
 
+    // If user is not Admin or Moderator, restrict to tasks assigned to them or created by them
+    if (!isAdminOrMod) {
+      query.$or = [{ assignees: userId }, { createdBy: userId }];
+    }
+
     if (status && typeof status === 'string') {
       query.status = status;
     }
+
     if (priority && typeof priority === 'string') {
       query.priority = priority;
     }
 
-    const tasks = await Task.find(query).sort({ order: 1, createdAt: -1 }).lean();
+    const tasks = await Task.find(query).sort({ status: 1, order: 1, createdAt: -1 }).lean();
 
     return res.status(200).json({
       success: true,
@@ -221,14 +197,14 @@ export async function getProjectTasks(req: Request, res: Response) {
     console.error('[TaskController] getProjectTasks error:', error);
     return res.status(500).json({
       success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve tasks' },
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve project tasks' },
     });
   }
 }
 
 /**
- * GET /api/v1/tasks/my-tasks
- * Retrieve caller's assigned tasks and private tasks across a workspace.
+ * GET /api/v1/tasks/my
+ * Get user's assigned/created tasks across all their joined projects (plus personal tasks).
  */
 export async function getMyTasks(req: Request, res: Response) {
   try {
@@ -240,45 +216,35 @@ export async function getMyTasks(req: Request, res: Response) {
       });
     }
 
-    const { workspaceId, filter } = req.query;
-    const query: any = {
+    // Find all projects where user is a member or owner
+    const userProjects = await Project.find({
+      deletedAt: null,
+      $or: [{ ownerId: userId }, { 'members.userId': userId }, { teamMembers: userId }],
+    }).lean();
+
+    const adminProjectIds: any[] = [];
+    const memberProjectIds: any[] = [];
+
+    for (const p of userProjects) {
+      if (isProjectAdminOrMod(p, userId)) {
+        adminProjectIds.push(p._id);
+      } else {
+        memberProjectIds.push(p._id);
+      }
+    }
+
+    const tasks = await Task.find({
       deletedAt: null,
       $or: [
-        { assignees: userId },
-        { createdBy: userId, isPrivate: true },
+        { projectId: { $in: adminProjectIds } },
+        { projectId: { $in: memberProjectIds }, assignees: userId },
+        { projectId: { $in: memberProjectIds }, createdBy: userId },
+        { projectId: null, createdBy: userId },
+        { projectId: null, assignees: userId },
       ],
-    };
-
-    if (workspaceId && typeof workspaceId === 'string' && mongoose.Types.ObjectId.isValid(workspaceId)) {
-      query.workspaceId = workspaceId;
-
-      // Self-healing: Cascade soft-delete any tasks belonging to deleted projects in this workspace
-      const deletedProjects = await Project.find({ workspaceId, deletedAt: { $ne: null } }).select('_id').lean();
-      if (deletedProjects.length > 0) {
-        const deletedProjectIds = deletedProjects.map((p) => p._id);
-        await Task.updateMany(
-          { projectId: { $in: deletedProjectIds }, deletedAt: null },
-          { deletedAt: new Date() }
-        );
-      }
-
-      // Strictly filter to active projects or personal tasks
-      const activeProjects = await Project.find({ workspaceId, deletedAt: null }).select('_id').lean();
-      const activeProjectIds = activeProjects.map((p) => p._id);
-      query.projectId = { $in: [...activeProjectIds, null] };
-    }
-
-    if (filter === 'upcoming') {
-      query.status = { $ne: 'Done' };
-      query.dueDate = { $gte: new Date() };
-    } else if (filter === 'overdue') {
-      query.status = { $ne: 'Done' };
-      query.dueDate = { $lt: new Date() };
-    } else if (filter === 'completed') {
-      query.status = 'Done';
-    }
-
-    const tasks = await Task.find(query).sort({ dueDate: 1, updatedAt: -1 }).lean();
+    })
+      .sort({ dueDate: 1, updatedAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -288,14 +254,14 @@ export async function getMyTasks(req: Request, res: Response) {
     console.error('[TaskController] getMyTasks error:', error);
     return res.status(500).json({
       success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve personal tasks' },
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve user tasks' },
     });
   }
 }
 
 /**
  * PATCH /api/v1/tasks/:id
- * Update task metadata, status, priority, subtasks, or assignees.
+ * Update a task's title, description, status, priority, assignees, due date, or subtasks.
  */
 export async function updateTask(req: Request, res: Response) {
   try {
@@ -306,8 +272,8 @@ export async function updateTask(req: Request, res: Response) {
         error: { code: 'UNAUTHORIZED', message: 'User session required' },
       });
     }
-    const { id } = req.params;
 
+    const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -338,39 +304,55 @@ export async function updateTask(req: Request, res: Response) {
       });
     }
 
-    // Verify workspace membership and project team membership
-    const workspace = await Workspace.findById(task.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    if (!callerMember) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Permission denied to edit this task' },
-      });
-    }
+    // Permission check
+    const isCreator = task.createdBy === userId;
+    let isAdminOrMod = false;
+    const isAssignee = task.assignees?.includes(userId);
 
-    const isPrivileged = callerMember.role === 'owner' || callerMember.role === 'admin' || workspace?.ownerId === userId;
     if (task.projectId) {
-      const project = await Project.findById(task.projectId).lean();
+      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
       if (project) {
-        const isTeamMember = project.teamMembers?.includes(userId);
-        if (!isTeamMember && !isPrivileged) {
-          return res.status(403).json({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'Only project team members or workspace admins can edit tasks for this project' },
-          });
-        }
+        isAdminOrMod = isProjectAdminOrMod(project, userId);
       }
     }
 
+    const canEditFull = isCreator || isAdminOrMod;
+    const canUpdateStatusOrChecklist = canEditFull || isAssignee;
+
+    if (!canUpdateStatusOrChecklist) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You do not have permission to modify this task' },
+      });
+    }
+
     const updates = parseResult.data;
-    if (updates.title) task.title = updates.title.trim();
-    if (updates.description !== undefined) task.description = updates.description.trim();
+
+    // Non-creator non-admins can ONLY change status or subtasks checklist
+    if (!canEditFull) {
+      if (
+        updates.title ||
+        (updates.description !== undefined && updates.description !== task.description) ||
+        updates.priority ||
+        updates.assignees ||
+        updates.dueDate !== undefined ||
+        updates.isPrivate !== undefined
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can edit task details' },
+        });
+      }
+    }
+
+    if (updates.title && canEditFull) task.title = updates.title.trim();
+    if (updates.description !== undefined && canEditFull) task.description = updates.description.trim();
     if (updates.status) task.status = updates.status;
-    if (updates.priority) task.priority = updates.priority;
-    if (updates.assignees) task.assignees = updates.assignees;
-    if (updates.dueDate !== undefined) task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+    if (updates.priority && canEditFull) task.priority = updates.priority;
+    if (updates.assignees && canEditFull) task.assignees = updates.assignees;
+    if (updates.dueDate !== undefined && canEditFull) task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
     if (updates.subtasks) task.subtasks = updates.subtasks as any;
-    if (updates.isPrivate !== undefined) task.isPrivate = updates.isPrivate;
+    if (updates.isPrivate !== undefined && canEditFull) task.isPrivate = updates.isPrivate;
 
     await task.save();
 
@@ -388,8 +370,8 @@ export async function updateTask(req: Request, res: Response) {
 }
 
 /**
- * PATCH /api/v1/tasks/:id/move
- * Update Kanban column status and order index.
+ * PUT /api/v1/tasks/:id/move
+ * Move a task to a new Kanban column or reorder position.
  */
 export async function moveTask(req: Request, res: Response) {
   try {
@@ -400,8 +382,8 @@ export async function moveTask(req: Request, res: Response) {
         error: { code: 'UNAUTHORIZED', message: 'User session required' },
       });
     }
-    const { id } = req.params;
 
+    const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -424,8 +406,6 @@ export async function moveTask(req: Request, res: Response) {
       });
     }
 
-    const { newStatus, newOrder } = parseResult.data;
-
     const task = await Task.findOne({ _id: id, deletedAt: null });
     if (!task) {
       return res.status(404).json({
@@ -434,29 +414,25 @@ export async function moveTask(req: Request, res: Response) {
       });
     }
 
-    // Verify workspace membership and project team membership
-    const workspace = await Workspace.findById(task.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    if (!callerMember) {
+    const isCreator = task.createdBy === userId;
+    const isAssignee = task.assignees?.includes(userId);
+    let isAdminOrMod = false;
+
+    if (task.projectId) {
+      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+      if (project) {
+        isAdminOrMod = isProjectAdminOrMod(project, userId);
+      }
+    }
+
+    if (!isCreator && !isAssignee && !isAdminOrMod) {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'Permission denied to move this task' },
+        error: { code: 'FORBIDDEN', message: 'You must be assigned to or an admin of this task to reorder it' },
       });
     }
 
-    const isPrivileged = callerMember.role === 'owner' || callerMember.role === 'admin' || workspace?.ownerId === userId;
-    if (task.projectId) {
-      const project = await Project.findById(task.projectId).lean();
-      if (project) {
-        const isTeamMember = project.teamMembers?.includes(userId);
-        if (!isTeamMember && !isPrivileged) {
-          return res.status(403).json({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'Only project team members or workspace admins can move tasks for this project' },
-          });
-        }
-      }
-    }
+    const { newStatus, newOrder } = parseResult.data;
 
     task.status = newStatus;
     task.order = newOrder;
@@ -477,7 +453,7 @@ export async function moveTask(req: Request, res: Response) {
 
 /**
  * DELETE /api/v1/tasks/:id
- * Soft delete a task.
+ * Soft delete a task. Only Task Creator or Project Admin/Moderator can delete.
  */
 export async function deleteTask(req: Request, res: Response) {
   try {
@@ -488,8 +464,8 @@ export async function deleteTask(req: Request, res: Response) {
         error: { code: 'UNAUTHORIZED', message: 'User session required' },
       });
     }
-    const { id } = req.params;
 
+    const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -505,15 +481,20 @@ export async function deleteTask(req: Request, res: Response) {
       });
     }
 
-    // Verify permission (creator, assignee, or workspace admin)
-    const workspace = await Workspace.findById(task.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    const isPrivileged = callerMember?.role === 'owner' || callerMember?.role === 'admin' || task.createdBy === userId;
+    const isCreator = task.createdBy === userId;
+    let isAdminOrMod = false;
 
-    if (!isPrivileged) {
+    if (task.projectId) {
+      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+      if (project) {
+        isAdminOrMod = isProjectAdminOrMod(project, userId);
+      }
+    }
+
+    if (!isCreator && !isAdminOrMod) {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'Permission denied to delete task' },
+        error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can delete tasks' },
       });
     }
 
@@ -529,6 +510,109 @@ export async function deleteTask(req: Request, res: Response) {
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to delete task' },
+    });
+  }
+}
+
+/**
+ * POST /api/v1/tasks/:id/comments
+ * Add a comment to a task.
+ */
+export async function addTaskComment(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
+      });
+    }
+
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
+      });
+    }
+
+    const parseResult = addCommentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid comment payload',
+          details: parseResult.error.errors.map((e) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      });
+    }
+
+    const task = await Task.findOne({ _id: id, deletedAt: null });
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Task not found' },
+      });
+    }
+
+    const isCreator = task.createdBy === userId;
+    const isAssignee = task.assignees?.includes(userId);
+    let isAdminOrMod = false;
+
+    if (task.projectId) {
+      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+      if (project) {
+        isAdminOrMod = isProjectAdminOrMod(project, userId);
+      }
+    }
+
+    if (!isCreator && !isAssignee && !isAdminOrMod) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You must be assigned to or an admin of this task to comment' },
+      });
+    }
+
+    let userName = 'User';
+    let userAvatar = '';
+    try {
+      const user = await clerkClient.users.getUser(userId);
+      if (user) {
+        userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username || user.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'User';
+        userAvatar = user.imageUrl || '';
+      }
+    } catch (e) {
+      console.warn('[TaskController] Could not fetch Clerk user for comment:', e);
+    }
+
+    const newComment = {
+      userId,
+      userName,
+      userAvatar,
+      text: parseResult.data.text.trim(),
+      createdAt: new Date(),
+    };
+
+    if (!task.comments) {
+      task.comments = [];
+    }
+
+    task.comments.push(newComment as any);
+    await task.save();
+
+    return res.status(201).json({
+      success: true,
+      data: task,
+    });
+  } catch (error: any) {
+    console.error('[TaskController] addTaskComment error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to add comment' },
     });
   }
 }

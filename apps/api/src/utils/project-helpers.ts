@@ -16,7 +16,7 @@ export function generateJoinCode(length = 6): string {
 }
 
 /**
- * Creates a URL-safe slug from a string (e.g., workspace name).
+ * Creates a URL-safe slug from a project name.
  * If randomSuffix is true, appends a short random alphanumeric string.
  */
 export function slugify(text: string, randomSuffix = false): string {
@@ -28,7 +28,7 @@ export function slugify(text: string, randomSuffix = false): string {
     .slice(0, 45);
 
   if (!slug) {
-    slug = 'workspace';
+    slug = 'project';
   }
 
   if (randomSuffix) {

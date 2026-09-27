@@ -53,18 +53,19 @@ export interface Milestone {
   updatedAt?: Date | string;
 }
 
-export type ProjectRole = 'Admin' | 'Member' | 'Viewer';
+export type ProjectRole = 'Admin' | 'Moderator' | 'Member';
 
 export interface ProjectTeamMember {
   userId: string;
   role: ProjectRole;
+  joinedAt?: Date | string;
 }
 
 export interface Project {
   id?: string;
   _id: string;
-  workspaceId: string;
-  roomId?: string;
+  ownerId: string;
+  joinCode: string;
   name: string;
   slug: string;
   description?: string;
@@ -89,10 +90,19 @@ export interface Subtask {
   completed: boolean;
 }
 
+export interface TaskComment {
+  _id?: string;
+  id?: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  text: string;
+  createdAt: Date | string;
+}
+
 export interface Task {
   id?: string;
   _id: string;
-  workspaceId: string;
   projectId?: string | null;
   createdBy: string;
   title: string;
@@ -103,6 +113,7 @@ export interface Task {
   assignees: string[]; // userIds
   dueDate?: Date | string | null;
   subtasks: Subtask[];
+  comments?: TaskComment[];
   isPrivate: boolean;
   deletedAt?: Date | string | null;
   createdAt: Date | string;

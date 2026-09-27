@@ -5,6 +5,43 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Architecture Simplification - Project-Centric Model] - 2026-09-22
+
+### Changed & Refactored
+- **Simplified Project-Centric Architecture**:
+  - Completely deprecated and removed the top-level `Workspace` collection, controllers, routes (`/api/v1/workspaces`), contexts, and modals.
+  - Made **Projects** the top-level collaboration boundary across Synca. Removed `workspaceId` requirement from `Project` and `Task` schemas.
+- **Project Join Codes**:
+  - Added auto-generated unique **6-character alphanumeric `joinCode`** (e.g., `AB12CD`) to all projects using cryptographically secure `generateJoinCode()`.
+  - Implemented `POST /api/v1/projects/join` endpoint and created [`<JoinProjectModal />`](file:///d:/Synca-FYP/apps/web/src/components/project/JoinProjectModal.tsx) for 1-click project joining.
+  - Added Join Code display card with clipboard copy button and Admin join code reset trigger ([`regenerateJoinCodeApi`](file:///d:/Synca-FYP/apps/web/src/lib/api/project.api.ts)).
+- **Simplified Project Roles & Permissions**:
+  - Defined 3 core project roles: **`Admin`**, **`Moderator`**, and **`Member`** in `@synca/types` and `@synca/zod-schemas`.
+  - Updated [`<EditTeamModal />`](file:///d:/Synca-FYP/apps/web/src/components/project/EditTeamModal.tsx) and project controllers to allow Project Admins to promote/demote member roles and manage rosters dynamically.
+- **Frontend & Navigation Refactor**:
+  - Updated [`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx) with a unified User Profile header and quick action triggers (`+ Create Project` and `🔑 Join Project`).
+  - Updated [`/projects`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/page.tsx) and [`/projects/[id]`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/[id]/page.tsx) to list all user projects and display project role badges.
+  - Updated [`/dashboard`](file:///d:/Synca-FYP/apps/web/src/app/(app)/dashboard/page.tsx) and [`TopBar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/TopBar.tsx) to operate seamlessly without Workspace context.
+  - Updated all Danger Zone UI labels and confirmation prompts from "Archive Project" / "Archiving..." to "Delete Project" / "Deleting...".
+- **Database Reset**:
+  - Wiped all existing project, task, and workspace documents from MongoDB Atlas for a clean slate.
+
+- **Task Detail View Modal (`<TaskDetailModal />`)**:
+  - Created dedicated organized read-only view for tasks distinct from full edit form, featuring status quick selector, subtasks checklist, assignee avatars, and comment stream.
+- **Task Comments System**:
+  - Added `TaskComment` schema, interface, and `POST /api/v1/tasks/:id/comments` endpoint allowing assignees and admins to post updates with Clerk user avatars and timestamps.
+- **Role-Gated Task Permissions & Visibility**:
+  - Restricted task visibility in `getProjectTasks` and `getMyTasks`: regular members only see tasks assigned to them or created by them. Unassigned tasks are visible strictly to Task Creators and Project Admins/Moderators.
+  - Restricted full task property editing and task deletion to Task Creators and Project Admins/Moderators. Assigned regular members have status change and commenting permissions.
+
+### Fixed
+- **Dashboard Task Display & Date Boundaries**:
+  - Broadened `getMyTasks` backend query (`apps/api/src/controllers/task.controller.ts`) so tasks created in any joined project, assigned to, or created by the user are returned.
+  - Updated string ID matching (`String(p._id) === String(t.projectId)`) in [`/dashboard/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/dashboard/page.tsx) to reliably associate tasks with active user projects.
+  - Aligned "Upcoming" vs "Overdue" task filtering in Dashboard to evaluate due dates against `todayStart` (`00:00:00.000` local time), ensuring tasks due on the current day correctly display under the "Upcoming" tab instead of "Overdue".
+- **Database Cleanup Script**:
+  - Created [`scripts/clear-db.js`](file:///d:/Synca-FYP/scripts/clear-db.js) and added `npm run clear-db` task to wipe all collections across MongoDB Atlas.
+
 ## [Phase 3 - Projects & Tasks] - 2026-09-21
 
 ### Added

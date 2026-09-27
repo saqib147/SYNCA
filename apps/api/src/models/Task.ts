@@ -6,8 +6,16 @@ export interface ISubtask {
   completed: boolean;
 }
 
+export interface IComment {
+  _id?: mongoose.Types.ObjectId;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  text: string;
+  createdAt: Date;
+}
+
 export interface ITask extends Document {
-  workspaceId: mongoose.Types.ObjectId;
   projectId?: mongoose.Types.ObjectId | null;
   createdBy: string;
   title: string;
@@ -18,6 +26,7 @@ export interface ITask extends Document {
   assignees: string[]; // Clerk userIds
   dueDate?: Date | null;
   subtasks: ISubtask[];
+  comments: IComment[];
   isPrivate: boolean;
   deletedAt?: Date | null;
   createdAt: Date;
@@ -32,14 +41,19 @@ const SubtaskSchema = new Schema<ISubtask>(
   { _id: true }
 );
 
+const CommentSchema = new Schema<IComment>(
+  {
+    userId: { type: String, required: true },
+    userName: { type: String, required: true, trim: true },
+    userAvatar: { type: String, default: '' },
+    text: { type: String, required: true, trim: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const TaskSchema = new Schema<ITask>(
   {
-    workspaceId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Workspace',
-      required: true,
-      index: true,
-    },
     projectId: {
       type: Schema.Types.ObjectId,
       ref: 'Project',
@@ -60,6 +74,7 @@ const TaskSchema = new Schema<ITask>(
     assignees: [{ type: String, trim: true }],
     dueDate: { type: Date, default: null },
     subtasks: [SubtaskSchema],
+    comments: [CommentSchema],
     isPrivate: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
   },
@@ -69,8 +84,8 @@ const TaskSchema = new Schema<ITask>(
 );
 
 // Indexes for high-performance Kanban and Dashboard queries
-TaskSchema.index({ workspaceId: 1, projectId: 1, deletedAt: 1, status: 1, order: 1 });
-TaskSchema.index({ workspaceId: 1, assignees: 1, deletedAt: 1 });
-TaskSchema.index({ workspaceId: 1, createdBy: 1, isPrivate: 1, deletedAt: 1 });
+TaskSchema.index({ projectId: 1, deletedAt: 1, status: 1, order: 1 });
+TaskSchema.index({ assignees: 1, deletedAt: 1 });
+TaskSchema.index({ createdBy: 1, isPrivate: 1, deletedAt: 1 });
 
 export const Task = mongoose.model<ITask>('Task', TaskSchema);

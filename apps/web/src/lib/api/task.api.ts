@@ -70,19 +70,19 @@ export async function fetchProjectTasks(
 }
 
 /**
- * Fetch current user's personal and assigned tasks across a workspace.
+ * Fetch current user's personal and assigned tasks across all joined projects.
  */
 export async function fetchMyTasks(
-  workspaceId: string,
   token: string,
   filter?: 'upcoming' | 'overdue' | 'completed' | 'all'
 ): Promise<Task[]> {
-  const params = new URLSearchParams({ workspaceId });
+  const params = new URLSearchParams();
   if (filter && filter !== 'all') {
     params.append('filter', filter);
   }
 
-  const res = await fetch(`${API_BASE_URL}/api/v1/tasks/my-tasks?${params.toString()}`, {
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE_URL}/api/v1/tasks/my${queryString}`, {
     method: 'GET',
     headers: getHeaders(token),
   });
@@ -148,4 +148,20 @@ export async function deleteTaskApi(
     headers: getHeaders(token),
   });
   return handleResponse<{ id: string; message: string }>(res);
+}
+
+/**
+ * Add a comment to a task.
+ */
+export async function addTaskCommentApi(
+  id: string,
+  text: string,
+  token: string
+): Promise<Task> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}/comments`, {
+    method: 'POST',
+    headers: getHeaders(token),
+    body: JSON.stringify({ text }),
+  });
+  return handleResponse<Task>(res);
 }

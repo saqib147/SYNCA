@@ -17,11 +17,13 @@ export interface IProjectMilestone {
 
 export interface IProjectMember {
   userId: string;
-  role: 'Admin' | 'Member' | 'Viewer';
+  role: 'Admin' | 'Moderator' | 'Member';
+  joinedAt?: Date;
 }
 
 export interface IProject extends Document {
-  workspaceId: mongoose.Types.ObjectId;
+  ownerId: string; // Clerk userId of project owner/creator
+  joinCode: string; // 6-character uppercase join code
   name: string;
   slug: string;
   description?: string;
@@ -64,14 +66,22 @@ const ProjectMilestoneSchema = new Schema<IProjectMilestone>(
 
 const ProjectSchema = new Schema<IProject>(
   {
-    workspaceId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Workspace',
+    ownerId: {
+      type: String,
       required: true,
+      trim: true,
+      index: true,
+    },
+    joinCode: {
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
       index: true,
     },
     name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, trim: true, lowercase: true },
+    slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
     description: { type: String, trim: true, default: '' },
     status: {
       type: String,
@@ -82,7 +92,7 @@ const ProjectSchema = new Schema<IProject>(
     privacy: {
       type: String,
       enum: ['Private', 'RoomWide', 'Public'],
-      default: 'RoomWide',
+      default: 'Public',
     },
     goals: [ProjectGoalSchema],
     milestones: [ProjectMilestoneSchema],
@@ -90,7 +100,8 @@ const ProjectSchema = new Schema<IProject>(
     members: [
       {
         userId: { type: String, required: true, trim: true },
-        role: { type: String, enum: ['Admin', 'Member', 'Viewer'], default: 'Member' },
+        role: { type: String, enum: ['Admin', 'Moderator', 'Member'], default: 'Member' },
+        joinedAt: { type: Date, default: Date.now },
       },
     ],
     connectedFiles: [{ type: String }],
@@ -101,9 +112,8 @@ const ProjectSchema = new Schema<IProject>(
   }
 );
 
-// Compound Indexes for fast listing and slug uniqueness per workspace
-ProjectSchema.index({ workspaceId: 1, slug: 1 }, { unique: true });
-ProjectSchema.index({ workspaceId: 1, deletedAt: 1, status: 1 });
-ProjectSchema.index({ workspaceId: 1, teamMembers: 1 });
+// Indexes for fast lookup
+ProjectSchema.index({ 'members.userId': 1 });
+ProjectSchema.index({ deletedAt: 1, status: 1 });
 
 export const Project = mongoose.model<IProject>('Project', ProjectSchema);

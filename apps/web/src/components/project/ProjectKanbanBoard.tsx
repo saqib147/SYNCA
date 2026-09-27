@@ -36,6 +36,7 @@ interface ProjectKanbanBoardProps {
   tasks: Task[];
   onMoveTask: (id: string, newStatus: string, newOrder: number) => Promise<void>;
   onEditTask: (task: Task) => void;
+  onSelectTask?: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onAddTaskToColumn: (status: string) => void;
   members?: Array<{ userId: string; name?: string; email?: string; imageUrl?: string }>;
@@ -47,10 +48,12 @@ const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 function SortableTaskCard({
   task,
   onEdit,
+  onSelect,
   onDelete,
 }: {
   task: Task;
   onEdit: () => void;
+  onSelect?: () => void;
   onDelete: () => void;
 }) {
   const {
@@ -124,7 +127,7 @@ function SortableTaskCard({
       </div>
 
       {/* Title & Desc */}
-      <div onClick={onEdit} className="cursor-pointer space-y-1">
+      <div onClick={() => (onSelect ? onSelect() : onEdit())} className="cursor-pointer space-y-1">
         <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-[#2ecc8f] transition-colors line-clamp-2">
           {task.title}
         </h4>
@@ -186,12 +189,14 @@ function KanbanColumn({
   title,
   tasks,
   onEditTask,
+  onSelectTask,
   onDeleteTask,
   onAddTask,
 }: {
   title: string;
   tasks: Task[];
   onEditTask: (task: Task) => void;
+  onSelectTask?: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onAddTask: () => void;
 }) {
@@ -241,6 +246,7 @@ function KanbanColumn({
               key={task._id}
               task={task}
               onEdit={() => onEditTask(task)}
+              onSelect={() => onSelectTask?.(task)}
               onDelete={() => onDeleteTask(task._id)}
             />
           ))}
@@ -277,6 +283,7 @@ export function ProjectKanbanBoard({
   tasks,
   onMoveTask,
   onEditTask,
+  onSelectTask,
   onDeleteTask,
   onAddTaskToColumn,
 }: ProjectKanbanBoardProps) {
@@ -353,6 +360,7 @@ export function ProjectKanbanBoard({
               title={col}
               tasks={columnTasks}
               onEditTask={onEditTask}
+              onSelectTask={onSelectTask}
               onDeleteTask={onDeleteTask}
               onAddTask={() => onAddTaskToColumn(col)}
             />

@@ -7,14 +7,17 @@
 
 ## 1. High-Level Overview
 
-**Synca** is a unified, real-time team collaboration platform that integrates project management, direct & channel messaging, file sharing, and task tracking within workspace **Rooms**.
+**Synca** is a unified, real-time team collaboration platform that integrates project management, direct & channel messaging, file sharing, and task tracking built around a **Project-Centric Architecture**.
 
 ### Key System Concepts
-- **Rooms**: Organizations or workspaces where admins manage members, custom roles, permissions, and settings.
-- **Projects**: Portfolio of work items organized by Kanban boards, Gantt timelines, flat lists, and calendars.
-- **Tasks**: Hierarchical work items with subtasks, priority levels, assignees, due dates, and custom Kanban status columns. Supports personal private tasks.
+- **Projects**: Top-level containers of work items, milestone deliverables, and channels. Each project has a unique 6-character alphanumeric `joinCode` for instant member onboarding.
+- **Project Roles**: Three-tier role hierarchy per project:
+  - **`Admin`**: Project owner/creator or promoted admin with full control over settings, member roles, join codes, and project archiving.
+  - **`Moderator`**: Manages project tasks, goals, milestones, and invites.
+  - **`Member`**: Collaborates on tasks, Kanban cards, subtasks, and project channels.
+- **Tasks**: Work items assigned within projects or personal private tasks (`isPrivate: true`).
 - **Messaging**: Real-time 1:1 Direct Messages (DMs) and project-scoped group channels (`#channel-name`) with rich-text (Tiptap), `@mentions`, emoji reactions, and file attachments.
-- **File Sharing**: Cloudinary-backed file attachments with file cards and signed URLs for room privacy.
+- **File Sharing**: Cloudinary-backed file attachments with file cards and signed private URLs.
 
 ---
 
@@ -23,9 +26,9 @@
 | Layer | Technology / Choice | Details / Reason |
 |---|---|---|
 | **Architecture** | Monorepo (Turborepo) | Shared TypeScript types (`packages/types`), Zod schemas (`packages/zod-schemas`), apps `apps/web` & `apps/api` |
-| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), Shadcn UI, ThemeContext (`light` / `dark` / `system` with zero-FOUC script), Zustand (UI state), TanStack Query v5 (Server state), Tiptap, Recharts |
+| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), ThemeContext (`light` / `dark` / `system` with zero-FOUC script), TanStack Query v5, Tiptap, Recharts |
 | **Backend** | Express.js + Socket.io | Standalone Node.js Express server on Render for persistent WebSockets |
-| **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for rich tasks, channels, and milestones |
+| **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for projects, tasks, channels, and milestones |
 | **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, and Socket.io multi-instance scaling |
 | **Authentication** | Clerk Auth | Email/OAuth auth, JWT session management, `@clerk/nextjs` & `@clerk/express` SDKs |
 | **File Storage** | Cloudinary | Media transform, file cards, signed private URLs |
@@ -37,83 +40,52 @@
 
 All REST API endpoints require `Authorization: Bearer <clerk_token>` header unless explicitly marked public.
 
-### 3.1 Workspace Management (`/api/v1/workspaces`)
-
-| Method | Endpoint | Description | Auth / Permission |
-|---|---|---|---|
-| `POST` | `/api/v1/workspaces` | Create a new Workspace (creator becomes Owner) | Authenticated |
-| `GET` | `/api/v1/workspaces` | List all workspaces user is a member of | Authenticated |
-| `GET` | `/api/v1/workspaces/:id` | Get Workspace details by ID or slug | Workspace Member |
-| `POST` | `/api/v1/workspaces/join` | Join Workspace via 6-character join code | Authenticated |
-| `PATCH` | `/api/v1/workspaces/:id` | Update Workspace settings (name, desc, isPrivate) | Owner / Admin |
-| `DELETE` | `/api/v1/workspaces/:id/members/:userId` | Remove member or leave workspace | Owner / Admin or Self |
-| `DELETE` | `/api/v1/workspaces/:id` | Delete Workspace | Workspace Owner |
-
-### 3.2 Projects (`/api/v1/projects`)
+### 3.1 Projects (`/api/v1/projects`)
 
 Detailed roles and permissions specification is documented in [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md).
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/projects` | Create a new Project in workspace | Authenticated (Workspace Member) |
-| `GET` | `/api/v1/projects?workspaceId=` | List projects in workspace (filters private projects for non-team members) | Authenticated |
-| `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Brief, Goals, Milestones, Enriched Members) | Team Member or WS Admin (`Private`), Workspace Member (`RoomWide` overview-only) |
-| `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, milestones, or team members | Team Member or WS Admin |
-| `DELETE` | `/api/v1/projects/:id` | Soft delete project and related tasks | Workspace Owner / Admin |
+| `POST` | `/api/v1/projects` | Create a new top-level Project (creator becomes Admin) | Authenticated |
+| `POST` | `/api/v1/projects/join` | Join an existing project using a 6-character `joinCode` | Authenticated |
+| `GET` | `/api/v1/projects` | List all active projects the user belongs to | Authenticated |
+| `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Goals, Milestones, Enriched Roster) | Project Member |
+| `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, or milestones | Admin / Moderator |
+| `PATCH` | `/api/v1/projects/:id/members/:userId/role` | Promote/demote project member (`Admin`, `Moderator`, `Member`) | Project Admin |
+| `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove member from project or leave project | Project Admin or Self |
+| `POST` | `/api/v1/projects/:id/join-code/reset` | Regenerate project join code | Project Admin |
+| `DELETE` | `/api/v1/projects/:id` | Soft delete project and cascade delete child tasks | Project Admin |
 
-### 3.3 Tasks (`/api/v1/tasks`)
-
-| Method | Endpoint | Description | Auth / Permission |
-|---|---|---|---|
-| `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | Team Member or WS Admin (Project tasks) |
-| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (Kanban / List) | Team Member or WS Admin |
-| `GET` | `/api/v1/tasks/my?workspaceId=` | Get user's assigned/created tasks across workspace | Authenticated |
-| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | Team Member or WS Admin |
-| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Team Member or WS Admin |
-| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator, Assignee, or WS Admin |
-
-### 3.4 Milestones (`/api/v1/milestones`)
+### 3.2 Tasks (`/api/v1/tasks`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/milestones` | Create project milestone | `milestone:manage` |
-| `GET` | `/api/v1/milestones?projectId=` | List milestones for project | `project:view` |
-| `PATCH` | `/api/v1/milestones/:id` | Update milestone status / progress | `milestone:manage` |
-| `DELETE` | `/api/v1/milestones/:id` | Delete milestone | `milestone:manage` |
+| `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | Project Member |
+| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (Kanban / List) | Project Member |
+| `GET` | `/api/v1/tasks/my` | Get user's assigned/created tasks across all joined projects | Authenticated |
+| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | Project Member / Assignee |
+| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Task Assignee / Admin |
+| `POST` | `/api/v1/tasks/:id/comments` | Add comment to a task | Task Assignee / Admin |
+| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator or Project Admin |
 
-### 3.5 Messages & Real-Time (`/api/v1/messages`)
+### 3.3 Messages & Real-Time (`/api/v1/messages`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
 | `GET` | `/api/v1/messages/dm/:userId` | Get DM message history (cursor paginated) | Authenticated |
-| `GET` | `/api/v1/messages/channel/:projectId` | Get channel message history (cursor paginated) | `chat:read` |
-| `POST` | `/api/v1/messages` | Send message (REST fallback) | `chat:send` |
-| `DELETE` | `/api/v1/messages/:id` | Soft delete message | Message Sender / Admin |
+| `GET` | `/api/v1/messages/channel/:projectId` | Get channel message history (cursor paginated) | Project Member |
+| `POST` | `/api/v1/messages` | Send message (REST fallback) | Project Member |
+| `DELETE` | `/api/v1/messages/:id` | Soft delete message | Sender / Project Admin |
 
-### 3.6 File Storage (`/api/v1/files`)
-
-| Method | Endpoint | Description | Auth / Permission |
-|---|---|---|---|
-| `POST` | `/api/v1/files/upload` | Upload file to Cloudinary & create FileRef | `file:upload` |
-| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Room Member |
-| `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | File Uploader / Admin |
-
-### 3.7 Notifications (`/api/v1/notifications`)
+### 3.4 File Storage (`/api/v1/files`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `GET` | `/api/v1/notifications` | Get user notifications feed | Authenticated |
-| `PATCH` | `/api/v1/notifications/:id/read` | Mark notification as read | Authenticated |
-| `PATCH` | `/api/v1/notifications/read-all` | Mark all notifications as read | Authenticated |
+| `POST` | `/api/v1/files/upload` | Upload file to Cloudinary & create FileRef | Authenticated |
+| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Project Member |
+| `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | Uploader / Admin |
 
-### 3.8 Directory & Users (`/api/v1/users`)
-
-| Method | Endpoint | Description | Auth / Permission |
-|---|---|---|---|
-| `GET` | `/api/v1/users/:id` | Get member profile | Room Member |
-| `GET` | `/api/v1/users?roomId=` | Search/list workspace members | Room Member |
-
-### 3.9 System & Webhooks
+### 3.5 System & Webhooks
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
@@ -164,57 +136,10 @@ This repository enforces strict execution and documentation rules defined in `.a
 |---|---|---|---|
 | **Phase 0** | Setup & Foundation | Completed | 100% |
 | **Phase 1** | Dashboard | Completed | 100% |
-| **Phase 2** | Workspace Management | Completed | 100% |
+| **Phase 2** | Architecture Simplification (Project-Centric Model) | Completed | 100% |
 | **Phase 3** | Projects & Tasks | Completed | 100% |
 | **Phase 4** | Real-Time Messaging | PENDING | 0% |
 | **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
 | **Phase 6** | People & Directory | PENDING | 0% |
 | **Phase 7** | Landing Page | PENDING | 0% |
 | **Phase 8** | Polish, Testing & Deployment | PENDING | 0% |
-
----
-
-### Active Phase Breakdown — Phase 0: Setup & Foundation (100%)
-
-- [x] **Step 1: Monorepo & App Initialization**: Set up Turborepo monorepo layout with `apps/web` (Next.js 14, TypeScript, Tailwind CSS), `apps/api` (Express), and `packages/` (`types`, `zod-schemas`, `config`).
-- [x] **Step 2: Component Library & Base Shell Layout**: Configure Shadcn UI and create base application layout with dark sidebar (`#16191e`), top bar, and route views matching `/design/` Figma mockups (`/dashboard`, `/todo`, `/projects`, `/chats`, `/settings`).
-- [x] **Step 3: Clerk Authentication System**: Integrate Clerk auth on client (`@clerk/nextjs`) and server (`@clerk/express`) with sign-up, sign-in, protected route guards, and session persistence.
-- [x] **Step 4: Express Server & MongoDB Connection**: Build Express backend server structure on Render, establish Mongoose MongoDB connection pooling, and set up Upstash Redis.
-- [x] **Step 5: Cloudinary File Storage Configuration**: Configure Cloudinary SDK on Express backend for signed uploads and file metadata tracking.
-- [x] **Step 6: Environment Configuration & Base Shell Verification**: Audit and set up environment variables across services, verify base layout, auth redirect flow, and initial server health.
-
----
-
-### Active Phase Breakdown — Phase 1: Dashboard (100%)
-
-- [x] **Step 1: Dashboard Layout & Greeting Grid**: Create the responsive layout structure for `/dashboard` matching Figma designs, and code the dynamic time-of-day greeting ("Good Morning/Afternoon/Evening").
-- [x] **Step 2: Metrics Stats Bar**: Implement the visual stats widgets for Task Completion Rate (visual radial/gauge meter), Active Projects, and Team Velocity with premium hover micro-animations.
-- [x] **Step 3: Task Status Navigation Panels**: Build the status tabs panel (`Upcoming`, `Overdue`, `Completed`) displaying a list of Task Cards, featuring priority level, project name, category badge, and assignee avatar.
-- [x] **Step 4: Analytics Completed Projects Chart**: Integrate Recharts/Calendar Grid to render the weekly completed tasks contribution heat map using theme gradients.
-- [x] **Step 5: Ongoing Projects & Recent Chats Widgets**: Build the ongoing projects quick-list and recent chats activity panel with unread badge count indicators.
-- [x] **Step 6: Route Simplification**: Removed ToDo tab per user specification, maintaining Dashboard and Projects core views.
-
----
-
-### Active Phase Breakdown — Phase 2: Workspace Management (100%)
-
-- [x] **Step 1: Database Model & Zod Schemas**: Define Mongoose `Workspace` schema, Zod validation schemas, and TypeScript interfaces for workspace objects, member rosters, and join codes.
-- [x] **Step 2: Workspace API Endpoints**: Implement Express workspace routes (`POST /api/v1/workspaces`, `GET /api/v1/workspaces`, `POST /api/v1/workspaces/join`, `DELETE /api/v1/workspaces/:id/members/:userId`).
-- [x] **Step 3: Workspace Context & Hook**: Build `WorkspaceContext` and `useWorkspace()` hook in `apps/web` with state management for active workspace and workspace switching.
-- [x] **Step 4: Workspace Selector & Switcher in Sidebar**: Add interactive workspace switcher dropdown to sidebar with active workspace indicators and quick-action triggers.
-- [x] **Step 5: Create & Join Workspace Modals**: Build accessible dialog modals for creating new workspaces and joining existing workspaces via 6-character alphanumeric codes.
-- [x] **Step 6: Dedicated Workspace Overview Page**: Build the `/workspaces/[id]` route featuring member roster, invite code copy buttons, and workspace settings.
-
----
-
-### Active Phase Breakdown — Phase 3: Projects & Tasks (100%)
-
-- [x] **Step 1: Data Models & Schema Alignment**: Define Mongoose `Project` and `Task` schemas in `apps/api/src/models/` scoped to `workspaceId`. Align `packages/types` and `packages/zod-schemas` for project and task validation.
-- [x] **Step 2: Project Backend REST API (`/api/v1/projects`)**: Implement Express routes for creating, listing (with status/priority/search filtering), retrieving by ID/slug, updating, and archiving projects in active workspaces.
-- [x] **Step 3: Task Backend REST API (`/api/v1/tasks`)**: Implement Express routes for creating tasks, project-scoped listing, user personal tasks (`/api/v1/tasks/my-tasks`), updating, Kanban re-ordering (`/move`), and soft deletion.
-- [x] **Step 4: Frontend API Client & State Hooks**: Build authenticated client methods in `apps/web/src/lib/api/` (`project.api.ts`, `task.api.ts`) and create custom React hooks (`useProjects`, `useTasks`).
-- [x] **Step 5: Project Portfolio Page & Creation Modal (`/projects`)**: Connect the `/projects` page to live backend data, build status & priority filters, and implement `<CreateProjectModal />` dialog with team member assignments.
-- [x] **Step 6: Project Detail Shell & Overview Tab (`/projects/[id]`)**: Build dynamic project page with tab navigation (Overview, Board, List, Settings), project brief, goals checklist, milestones progress cards, and team roster.
-- [x] **Step 7: Kanban Board Tab with Drag-and-Drop**: Build the Board view with `@dnd-kit` drag-and-drop between columns (*To Do*, *In Progress*, *Done*, + Custom), optimistic UI updates, subtask counters, and priority pills.
-- [x] **Step 8: Task List View & Task Detail/Edit Modal**: Build tabular task list with inline toggles, and create `<TaskModal />` for editing title, description, assignees, due date, priority, and interactive subtasks.
-- [x] **Step 9: Dashboard Integration & Verification**: Connect Dashboard Task Status tabs and Private Tasks widget to live user tasks, verifying full end-to-end functionality across light and dark modes.

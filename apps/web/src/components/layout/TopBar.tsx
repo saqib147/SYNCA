@@ -1,13 +1,9 @@
 'use client';
 
-import { Search, Bell, Share2, User } from 'lucide-react';
-import { useWorkspace } from '@/hooks/useWorkspace';
+import { Search, Bell, Share2 } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
-import { cn } from '@/lib/utils';
 
 export function TopBar() {
-  const { activeWorkspace, isLoading } = useWorkspace();
-
   return (
     <header className="h-16 w-full flex items-center justify-between px-6 bg-transparent">
       {/* Search Input */}
@@ -22,21 +18,10 @@ export function TopBar() {
 
       {/* Action Group */}
       <div className="flex items-center gap-3">
-        {/* Workspace Badge */}
+        {/* Status Badge */}
         <div className="px-3 py-1 rounded-full bg-white dark:bg-white/[0.05] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] text-xs font-semibold text-zinc-700 dark:text-zinc-300 shadow-sm flex items-center gap-1.5">
-          <span
-            className={cn(
-              'w-2 h-2 rounded-full',
-              activeWorkspace ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'
-            )}
-          />
-          <span className="max-w-[150px] truncate">
-            {isLoading
-              ? 'Loading...'
-              : activeWorkspace
-              ? activeWorkspace.name
-              : 'No Workspace'}
-          </span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="max-w-[150px] truncate">Synca Platform</span>
         </div>
 
         {/* Theme Toggle Button */}

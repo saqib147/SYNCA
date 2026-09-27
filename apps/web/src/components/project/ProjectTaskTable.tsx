@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 interface ProjectTaskTableProps {
   tasks: Task[];
   onEditTask: (task: Task) => void;
+  onSelectTask?: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onToggleSubtask?: (taskId: string, subtaskIndex: number) => void;
 }
@@ -23,6 +24,7 @@ interface ProjectTaskTableProps {
 export function ProjectTaskTable({
   tasks,
   onEditTask,
+  onSelectTask,
   onDeleteTask,
 }: ProjectTaskTableProps) {
   const priorityBadges: Record<TaskPriority, string> = {
@@ -73,7 +75,7 @@ export function ProjectTaskTable({
                 <tr
                   key={task._id}
                   className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/30 transition-colors group cursor-pointer"
-                  onClick={() => onEditTask(task)}
+                  onClick={() => (onSelectTask ? onSelectTask(task) : onEditTask(task))}
                 >
                   {/* Title & Desc */}
                   <td className="py-3.5 pl-6 pr-4 max-w-xs">

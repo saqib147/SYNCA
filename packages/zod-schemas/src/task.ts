@@ -8,7 +8,6 @@ export const subtaskSchema = z.object({
 });
 
 export const createTaskSchema = z.object({
-  workspaceId: z.string().min(1, 'Workspace ID is required').optional(),
   projectId: z.string().optional().nullable(),
   title: z.string().min(1, 'Task title is required').max(280),
   description: z.string().max(2000).optional(),
@@ -28,7 +27,12 @@ export const moveTaskSchema = z.object({
   newOrder: z.number().min(0).default(0),
 });
 
+export const addCommentSchema = z.object({
+  text: z.string().min(1, 'Comment text cannot be empty').max(2000),
+});
+
 export type CreateTaskInput = z.input<typeof createTaskSchema>;
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
 export type MoveTaskInput = z.input<typeof moveTaskSchema>;
+export type AddCommentInput = z.input<typeof addCommentSchema>;
 

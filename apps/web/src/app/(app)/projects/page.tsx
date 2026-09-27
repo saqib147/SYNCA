@@ -14,24 +14,24 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
-  MoreHorizontal,
   Loader2,
+  KeyRound,
 } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
-import { useWorkspace } from '@/hooks/useWorkspace';
 import { useUser } from '@clerk/nextjs';
 import { CreateProjectModal } from '@/components/project/CreateProjectModal';
+import { JoinProjectModal } from '@/components/project/JoinProjectModal';
 import { ProjectStatus } from '@synca/types';
 import { cn } from '@/lib/utils';
 
 export default function ProjectsPage() {
   const { user } = useUser();
-  const { activeWorkspace } = useWorkspace();
-  const { projects, isLoading, refreshProjects } = useProjects();
+  const { projects, isLoading } = useProjects();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
   // Status Metrics
   const metrics = useMemo(() => {
@@ -98,93 +98,105 @@ export default function ProjectsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#2ecc8f] uppercase tracking-wider">
-            <FolderKanban className="w-3.5 h-3.5" />
-            <span>Workspace Initiatives</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Projects Portfolio</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight mt-1">
-            Project Portfolio
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white mt-1">
+            Projects & Workspaces
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Manage, collaborate, and track active deliverables in{' '}
-            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-              {activeWorkspace?.name || 'your workspace'}
-            </span>
-            .
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            Manage your project goals, join codes, board workflows, and task progress
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-[#d8f870] hover:bg-[#c4ea48] text-zinc-950 text-xs font-bold shadow-md shadow-[#d8f870]/10 transition-all active:scale-[0.98] shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowJoinModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-zinc-100 dark:bg-white/[0.06] hover:bg-zinc-200 dark:hover:bg-white/[0.1] text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all border border-zinc-200 dark:border-white/[0.08]"
+          >
+            <KeyRound className="w-4 h-4 text-lime-500" />
+            <span>Join with Code</span>
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-zinc-950 text-xs font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Project</span>
+          </button>
+        </div>
       </div>
 
-      {/* Metrics Summary Strip */}
+      {/* Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[
-          { label: 'Total Projects', value: metrics.total, icon: Layers, color: 'text-zinc-700 dark:text-zinc-300' },
-          { label: 'Active Sprint', value: metrics.active, icon: Sparkles, color: 'text-[#2ecc8f]' },
-          { label: 'On Track', value: metrics.onTrack, icon: CheckCircle2, color: 'text-emerald-500' },
-          { label: 'At Risk', value: metrics.atRisk, icon: AlertCircle, color: 'text-rose-500' },
-          { label: 'Completed', value: metrics.completed, icon: Clock, color: 'text-indigo-400' },
-        ].map((item, idx) => {
-          const Icon = item.icon;
-          return (
-            <div
-              key={idx}
-              className="p-3.5 rounded-2xl bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm flex items-center gap-3 transition-colors"
-            >
-              <div className={cn('p-2 rounded-xl bg-zinc-100 dark:bg-white/[0.05]', item.color)}>
-                <Icon className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{item.label}</p>
-                <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">{item.value}</p>
-              </div>
-            </div>
-          );
-        })}
+        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <FolderKanban className="w-4 h-4 text-lime-500" />
+            <span>Total Projects</span>
+          </div>
+          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.total}</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <Clock className="w-4 h-4 text-lime-400" />
+            <span>Active Sprint</span>
+          </div>
+          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.active}</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span>On Track</span>
+          </div>
+          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.onTrack}</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <AlertCircle className="w-4 h-4 text-rose-500" />
+            <span>At Risk</span>
+          </div>
+          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.atRisk}</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm col-span-2 sm:col-span-1">
+          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
+            <Layers className="w-4 h-4 text-indigo-400" />
+            <span>Completed</span>
+          </div>
+          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.completed}</p>
+        </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm transition-colors">
-        {/* Search */}
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Filter & Search Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.08] shadow-sm">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search projects by title or scope..."
+            placeholder="Search projects..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-700/80 text-xs text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-[#8be6c1] focus:border-[#8be6c1]"
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-50 dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.08] text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-lime-500/50"
           />
         </div>
 
         {/* Status Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto scrollbar-none">
-          {['All', 'ActiveSprint', 'OnTrack', 'AtRisk', 'Completed'].map((tab) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {['All', 'ActiveSprint', 'OnTrack', 'AtRisk', 'Completed'].map((st) => (
             <button
-              key={tab}
-              onClick={() => setStatusFilter(tab)}
+              key={st}
+              onClick={() => setStatusFilter(st)}
               className={cn(
                 'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all',
-                statusFilter === tab
-                  ? 'bg-zinc-900 dark:bg-[#1f242e] text-white dark:text-[#d8f870] border border-transparent dark:border-[#d8f870]/30 shadow-sm'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                statusFilter === st
+                  ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm'
+                  : 'bg-zinc-100 dark:bg-white/[0.04] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-white/[0.08]'
               )}
             >
-              {tab === 'All'
-                ? 'All Statuses'
-                : tab === 'ActiveSprint'
-                ? 'Active Sprint'
-                : tab === 'OnTrack'
-                ? 'On Track'
-                : tab === 'AtRisk'
-                ? 'At Risk'
-                : tab}
+              {st === 'All' ? 'All Status' : st}
             </button>
           ))}
         </div>
@@ -192,179 +204,122 @@ export default function ProjectsPage() {
 
       {/* Projects Grid */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-[300px] space-y-3">
-          <Loader2 className="w-8 h-8 text-[#d8f870] animate-spin" />
-          <p className="text-xs text-zinc-500 font-medium">Loading workspace projects...</p>
+        <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-lime-500" />
+          <p className="text-xs font-medium">Loading project portfolio...</p>
         </div>
-      ) : filteredProjects.length === 0 ? (
-        <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-10 border border-dashed border-zinc-300 dark:border-zinc-800 text-center space-y-4 max-w-md mx-auto my-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#d8f870]/15 text-[#d8f870] flex items-center justify-center mx-auto shadow-sm">
-            <FolderKanban className="w-7 h-7" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              {search || statusFilter !== 'All' ? 'No matching projects found' : 'No projects created yet'}
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              {search || statusFilter !== 'All'
-                ? 'Try resetting your search query or status filter.'
-                : 'Get started by creating your first project workspace with Kanban boards and milestones.'}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#d8f870] text-zinc-950 hover:bg-[#c4ea48] transition-all shadow-md shadow-[#d8f870]/10"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create First Project</span>
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      ) : filteredProjects.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredProjects.map((proj) => {
             const badge = getStatusBadge(proj.status);
-            const goalsCount = proj.goals?.length || 0;
-            const completedGoals = proj.goals?.filter((g) => g.completed)?.length || 0;
-            const progressPct =
-              goalsCount > 0 ? Math.round((completedGoals / goalsCount) * 100) : 0;
+            const totalGoals = proj.goals?.length || 0;
+            const completedGoals = proj.goals?.filter((g) => g.completed).length || 0;
+            const goalProgress = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
             return (
               <Link
                 key={proj._id}
                 href={`/projects/${proj._id}`}
-                className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] shadow-sm hover:shadow-md hover:border-zinc-300 dark:hover:border-white/[0.18] transition-all flex flex-col justify-between space-y-4 group cursor-pointer relative overflow-hidden"
+                className="group relative flex flex-col justify-between p-5 rounded-3xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-xl border border-zinc-200 dark:border-white/[0.08] hover:border-lime-500/50 shadow-sm hover:shadow-xl transition-all duration-300"
               >
-                {/* Top ambient highlight on hover */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#d8f870]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div>
+                  {/* Top Card Row */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-lime-400/20 to-emerald-500/20 border border-lime-500/30 flex items-center justify-center text-lime-600 dark:text-lime-400 font-extrabold text-sm shrink-0">
+                        {proj.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-lime-500 transition-colors line-clamp-1">
+                          {proj.name}
+                        </h3>
+                        <p className="text-[11px] text-zinc-400 font-mono">Code: {proj.joinCode}</p>
+                      </div>
+                    </div>
 
-                <div className="space-y-3">
-                  {/* Status & Options */}
-                  <div className="flex items-center justify-between">
                     <span
                       className={cn(
-                        'px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1.5',
+                        'px-2.5 py-1 rounded-xl text-[10px] font-bold border flex items-center gap-1.5 shrink-0',
                         badge.classes
                       )}
                     >
                       <span className={cn('w-1.5 h-1.5 rounded-full', badge.dot)} />
-                      <span>{badge.label}</span>
-                    </span>
-                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono capitalize">
-                      {proj.privacy}
+                      {badge.label}
                     </span>
                   </div>
 
-                  {/* Title & Desc */}
-                  <div>
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-[#2ecc8f] transition-colors line-clamp-1">
-                      {proj.name}
-                    </h3>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">
-                      {proj.description || 'No description provided.'}
-                    </p>
-                  </div>
-                </div>
+                  {/* Description */}
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 min-h-[2.5rem] mb-4">
+                    {proj.description || 'No description provided for this project.'}
+                  </p>
 
-                {/* Progress & Goals */}
-                <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-white/[0.06]">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-medium">
-                      <span className="text-zinc-500 dark:text-zinc-400">
-                        {goalsCount > 0
-                          ? `Goals (${completedGoals}/${goalsCount})`
-                          : 'Progress'}
-                      </span>
-                      <span className="text-zinc-900 dark:text-zinc-100 font-bold">
-                        {progressPct}%
-                      </span>
+                  {/* Goals Progress Bar */}
+                  <div className="space-y-1.5 mb-4">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                      <span>Goal Progress</span>
+                      <span>{goalProgress}%</span>
                     </div>
-                    <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-zinc-100 dark:bg-white/[0.08] overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-[#2ecc8f] to-[#d8f870] rounded-full transition-all"
-                        style={{ width: `${progressPct}%` }}
+                        className="h-full bg-gradient-to-r from-lime-400 to-emerald-500 rounded-full transition-all duration-500"
+                        style={{ width: `${goalProgress}%` }}
                       />
                     </div>
                   </div>
+                </div>
 
-                  {/* Members & Date */}
-                  <div className="flex items-center justify-between pt-1 text-xs text-zinc-400 dark:text-zinc-500 font-medium">
-                    <div className="flex -space-x-1.5 overflow-hidden">
-                      {proj.teamMembers && proj.teamMembers.length > 0 ? (
-                        proj.teamMembers.slice(0, 4).map((uid, idx) => {
-                          const isCurrentUser = uid === user?.id;
-                          const mem = activeWorkspace?.members?.find((m) => m.userId === uid);
-                          const avatarUrl = isCurrentUser ? (user?.imageUrl || mem?.imageUrl) : mem?.imageUrl;
-                          const name = isCurrentUser
-                            ? (user?.fullName || mem?.name || 'You')
-                            : (mem?.name || mem?.email || 'Member');
-                          const initials = name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')
-                            .toUpperCase()
-                            .slice(0, 2);
-
-                          return avatarUrl ? (
-                            <img
-                              key={idx}
-                              src={avatarUrl}
-                              alt={name}
-                              title={name}
-                              className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-zinc-900 object-cover shrink-0"
-                            />
-                          ) : (
-                            <div
-                              key={idx}
-                              title={name}
-                              className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-zinc-900 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center justify-center shrink-0"
-                            >
-                              {initials}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <span className="text-[11px] text-zinc-400">Team</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span className="text-[11px]">
-                        {new Date(proj.createdAt).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
+                {/* Card Footer */}
+                <div className="pt-3 border-t border-zinc-100 dark:border-white/[0.08] flex items-center justify-between text-xs text-zinc-400">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{new Date(proj.createdAt).toLocaleDateString()}</span>
                   </div>
+
+                  <span className="flex items-center gap-1 text-lime-600 dark:text-lime-400 font-bold group-hover:translate-x-1 transition-transform">
+                    <span>View Project</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
                 </div>
               </Link>
             );
           })}
-
-          {/* New Project CTA Card */}
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-white/60 dark:bg-white/[0.02] dark:backdrop-blur-md hover:bg-white dark:hover:bg-white/[0.05] rounded-3xl p-6 border-2 border-dashed border-zinc-300 dark:border-white/[0.1] hover:border-[#2ecc8f] dark:hover:border-[#2ecc8f] flex flex-col items-center justify-center text-center space-y-3 min-h-[220px] transition-all group"
-          >
-            <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-[#d8f870] flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Plus className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">New Project</h3>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                Launch an initiative in this workspace
-              </p>
-            </div>
-          </button>
+        </div>
+      ) : (
+        <div className="text-center py-16 p-8 rounded-3xl bg-white dark:bg-white/[0.02] border border-dashed border-zinc-300 dark:border-white/[0.1] space-y-4">
+          <FolderKanban className="w-12 h-12 text-zinc-400 mx-auto" />
+          <div>
+            <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">No Projects Found</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+              {search || statusFilter !== 'All'
+                ? 'Try adjusting your search query or status filter.'
+                : 'Get started by creating your first project or joining one with a code.'}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setShowJoinModal(true)}
+              className="px-4 py-2 text-xs font-bold rounded-xl bg-zinc-100 dark:bg-white/[0.06] text-zinc-800 dark:text-zinc-200"
+            >
+              Join Project with Code
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 text-xs font-bold rounded-xl bg-lime-400 text-zinc-950 shadow-md"
+            >
+              Create Project
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Create Project Modal */}
+      {/* Modals */}
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onCreated={() => refreshProjects()}
+      />
+      <JoinProjectModal
+        isOpen={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
       />
     </div>
   );

@@ -1,11 +1,10 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { getAuth, clerkClient } from '@clerk/express';
-import { createProjectSchema, updateProjectSchema } from '@synca/zod-schemas';
+import { createProjectSchema, updateProjectSchema, joinProjectSchema } from '@synca/zod-schemas';
 import { Project } from '../models/Project.js';
 import { Task } from '../models/Task.js';
-import { Workspace } from '../models/Workspace.js';
-import { slugify } from '../utils/workspace-helpers.js';
+import { generateJoinCode, slugify } from '../utils/project-helpers.js';
 
 const getUserId = (req: Request): string | undefined => {
   try {
@@ -17,7 +16,7 @@ const getUserId = (req: Request): string | undefined => {
 
 /**
  * POST /api/v1/projects
- * Create a new project within an active workspace.
+ * Create a new top-level project.
  */
 export async function createProject(req: Request, res: Response) {
   try {
@@ -44,66 +43,53 @@ export async function createProject(req: Request, res: Response) {
       });
     }
 
-    const { workspaceId, roomId, name, description, status, privacy, teamMembers, goals, milestones } = parseResult.data;
-    const targetWorkspaceId = workspaceId || roomId;
+    const { name, description, status, privacy, teamMembers, goals, milestones } = parseResult.data;
 
-    if (!targetWorkspaceId || !mongoose.Types.ObjectId.isValid(targetWorkspaceId)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid workspace ID is required' },
-      });
-    }
-
-    // Verify caller belongs to the workspace
-    const workspace = await Workspace.findById(targetWorkspaceId).lean();
-    if (!workspace) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Workspace not found' },
-      });
-    }
-
-    const isMember = workspace.members.some((m) => m.userId === userId);
-    if (!isMember) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'You must be a member of this workspace to create projects' },
-      });
-    }
-
-    // Generate unique slug within workspace
+    // Generate unique slug
     let candidateSlug = parseResult.data.slug || slugify(name);
-    const existingSlug = await Project.findOne({ workspaceId: targetWorkspaceId, slug: candidateSlug }).lean();
+    const existingSlug = await Project.findOne({ slug: candidateSlug, deletedAt: null }).lean();
     if (existingSlug) {
       candidateSlug = slugify(name, true);
     }
 
-    // Ensure creator is in team members and assigned 'Admin' role
+    // Generate unique join code
+    let joinCode = generateJoinCode();
+    let existingCode = await Project.findOne({ joinCode }).lean();
+    while (existingCode) {
+      joinCode = generateJoinCode();
+      existingCode = await Project.findOne({ joinCode }).lean();
+    }
+
+    // Build members map (Creator is Admin)
     const inputMembers = parseResult.data.members || [];
-    const membersMap = new Map<string, 'Admin' | 'Member' | 'Viewer'>();
+    const membersMap = new Map<string, { role: 'Admin' | 'Moderator' | 'Member'; joinedAt: Date }>();
 
-    // Any teamMembers strings default to 'Member'
-    (teamMembers || []).forEach((uid) => membersMap.set(uid, 'Member'));
+    (teamMembers || []).forEach((uid) =>
+      membersMap.set(uid, { role: 'Member', joinedAt: new Date() })
+    );
 
-    // Any explicit members with roles
-    inputMembers.forEach((m) => membersMap.set(m.userId, m.role));
+    inputMembers.forEach((m) =>
+      membersMap.set(m.userId, { role: m.role as any, joinedAt: new Date() })
+    );
 
-    // Creator is always Admin / PM
-    membersMap.set(userId, 'Admin');
+    // Creator is always Admin
+    membersMap.set(userId, { role: 'Admin', joinedAt: new Date() });
 
-    const finalMembersList = Array.from(membersMap.entries()).map(([uId, r]) => ({
+    const finalMembersList = Array.from(membersMap.entries()).map(([uId, data]) => ({
       userId: uId,
-      role: r,
+      role: data.role,
+      joinedAt: data.joinedAt,
     }));
     const finalTeamMemberIds = Array.from(membersMap.keys());
 
     const newProject = await Project.create({
-      workspaceId: targetWorkspaceId,
+      ownerId: userId,
+      joinCode,
       name,
       slug: candidateSlug,
       description: description || '',
       status: status || 'ActiveSprint',
-      privacy: privacy || 'RoomWide',
+      privacy: privacy || 'Public',
       teamMembers: finalTeamMemberIds,
       members: finalMembersList,
       goals: goals || [],
@@ -124,10 +110,10 @@ export async function createProject(req: Request, res: Response) {
 }
 
 /**
- * GET /api/v1/projects
- * List all active projects in a workspace (with optional status & text filter).
+ * POST /api/v1/projects/join
+ * Join an existing project using a 6-character join code.
  */
-export async function getWorkspaceProjects(req: Request, res: Response) {
+export async function joinProject(req: Request, res: Response) {
   try {
     const userId = getUserId(req);
     if (!userId) {
@@ -137,50 +123,74 @@ export async function getWorkspaceProjects(req: Request, res: Response) {
       });
     }
 
-    const { workspaceId, status, search } = req.query;
-    if (!workspaceId || typeof workspaceId !== 'string' || !mongoose.Types.ObjectId.isValid(workspaceId)) {
+    const parseResult = joinProjectSchema.safeParse(req.body);
+    if (!parseResult.success) {
       return res.status(400).json({
         success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid workspaceId query parameter required' },
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: '6-character uppercase join code required',
+        },
       });
     }
 
-    // Verify caller is member
-    const workspace = await Workspace.findById(workspaceId).lean();
-    if (!workspace) {
+    const cleanCode = parseResult.data.joinCode.trim().toUpperCase();
+    const project = await Project.findOne({ joinCode: cleanCode, deletedAt: null });
+
+    if (!project) {
       return res.status(404).json({
         success: false,
-        error: { code: 'NOT_FOUND', message: 'Workspace not found' },
+        error: { code: 'NOT_FOUND', message: 'Invalid or expired project join code' },
       });
     }
 
-    const isMember = workspace.members.some((m) => m.userId === userId);
-    if (!isMember) {
-      return res.status(403).json({
+    // Check if user is already a member
+    const existingMember = project.members.find((m) => m.userId === userId);
+    if (!existingMember) {
+      project.members.push({
+        userId,
+        role: 'Member',
+        joinedAt: new Date(),
+      });
+      if (!project.teamMembers.includes(userId)) {
+        project.teamMembers.push(userId);
+      }
+      await project.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: project,
+    });
+  } catch (error: any) {
+    console.error('[ProjectController] joinProject error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to join project' },
+    });
+  }
+}
+
+/**
+ * GET /api/v1/projects
+ * List all active projects the user is a member of.
+ */
+export async function getUserProjects(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'You must be a member of this workspace to view projects' },
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
       });
     }
 
-    const callerMember = workspace.members.find((m) => m.userId === userId);
-    const isPrivileged = callerMember?.role === 'owner' || callerMember?.role === 'admin' || workspace.ownerId === userId;
+    const { status, search } = req.query;
 
     const query: any = {
-      workspaceId,
       deletedAt: null,
+      $or: [{ ownerId: userId }, { 'members.userId': userId }, { teamMembers: userId }],
     };
-
-    // Non-privileged users only see RoomWide/Public projects OR Private projects where they are in teamMembers
-    if (!isPrivileged) {
-      query.$and = [
-        {
-          $or: [
-            { privacy: { $ne: 'Private' } },
-            { teamMembers: userId },
-          ],
-        },
-      ];
-    }
 
     if (status && typeof status === 'string') {
       query.status = status;
@@ -188,12 +198,7 @@ export async function getWorkspaceProjects(req: Request, res: Response) {
 
     if (search && typeof search === 'string' && search.trim()) {
       const regex = new RegExp(search.trim(), 'i');
-      const searchCondition = { $or: [{ name: regex }, { description: regex }] };
-      if (query.$and) {
-        query.$and.push(searchCondition);
-      } else {
-        query.$and = [searchCondition];
-      }
+      query.$and = [{ $or: [{ name: regex }, { description: regex }] }];
     }
 
     const projects = await Project.find(query).sort({ updatedAt: -1 }).lean();
@@ -203,7 +208,7 @@ export async function getWorkspaceProjects(req: Request, res: Response) {
       data: projects,
     });
   } catch (error: any) {
-    console.error('[ProjectController] getWorkspaceProjects error:', error);
+    console.error('[ProjectController] getUserProjects error:', error);
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve projects' },
@@ -213,7 +218,7 @@ export async function getWorkspaceProjects(req: Request, res: Response) {
 
 /**
  * GET /api/v1/projects/:id
- * Retrieve a project by its ObjectId or slug.
+ * Retrieve a project by ObjectId or slug.
  */
 export async function getProjectById(req: Request, res: Response) {
   try {
@@ -236,59 +241,68 @@ export async function getProjectById(req: Request, res: Response) {
       });
     }
 
-    // Verify caller is member of workspace
-    const workspace = await Workspace.findById(project.workspaceId).lean();
-    if (!workspace) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Workspace not found' },
-      });
-    }
+    // Check membership
+    const isMember =
+      project.ownerId === userId ||
+      (project.members && project.members.some((m: any) => m.userId === userId)) ||
+      project.teamMembers?.includes(userId);
 
-    const isMember = workspace.members.some((m) => m.userId === userId);
     if (!isMember) {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'Access denied to this project' },
+        error: { code: 'FORBIDDEN', message: 'You must be a project member to view details' },
       });
     }
 
-    // Enforce private project visibility
-    const callerMember = workspace.members.find((m) => m.userId === userId);
-    const isPrivileged = callerMember?.role === 'owner' || callerMember?.role === 'admin' || workspace.ownerId === userId;
-    const isTeamMember = project.teamMembers?.includes(userId);
+    // Fetch profile details for team members from Clerk
+    let teamMemberProfiles: Array<{
+      userId: string;
+      name?: string;
+      email?: string;
+      imageUrl?: string;
+      projectRole?: 'Admin' | 'Moderator' | 'Member';
+    }> = [];
 
-    if (project.privacy === 'Private' && !isTeamMember && !isPrivileged) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'This project is private and accessible only to assigned team members' },
-      });
-    }
+    const memberUserIds = Array.from(
+      new Set([
+        ...(project.teamMembers || []),
+        ...(project.members?.map((m: any) => m.userId) || []),
+        project.ownerId,
+      ])
+    ).filter(Boolean);
 
-    // Fetch profile details for team members from Clerk with their project role
-    let teamMemberProfiles: Array<{ userId: string; name?: string; email?: string; imageUrl?: string; projectRole?: 'Admin' | 'Member' | 'Viewer' }> = [];
-    if (project.teamMembers && project.teamMembers.length > 0) {
+    if (memberUserIds.length > 0) {
       try {
-        const clerkUsers = await clerkClient.users.getUserList({ userId: project.teamMembers, limit: 50 });
-        const memberRoleMap = new Map<string, 'Admin' | 'Member' | 'Viewer'>();
+        const clerkUsers = await clerkClient.users.getUserList({ userId: memberUserIds, limit: 50 });
+        const memberRoleMap = new Map<string, 'Admin' | 'Moderator' | 'Member'>();
         (project.members || []).forEach((m: any) => memberRoleMap.set(m.userId, m.role));
 
-        teamMemberProfiles = clerkUsers.data.map((u) => ({
-          userId: u.id,
-          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Team Member',
-          email: u.emailAddresses?.[0]?.emailAddress,
-          imageUrl: u.imageUrl,
-          projectRole: memberRoleMap.get(u.id) || (u.id === workspace.ownerId ? 'Admin' : 'Member'),
-        }));
+        teamMemberProfiles = clerkUsers.data.map((u) => {
+          let derivedRole: 'Admin' | 'Moderator' | 'Member' = memberRoleMap.get(u.id) || 'Member';
+          if (u.id === project.ownerId) derivedRole = 'Admin';
+
+          return {
+            userId: u.id,
+            name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Team Member',
+            email: u.emailAddresses?.[0]?.emailAddress,
+            imageUrl: u.imageUrl,
+            projectRole: derivedRole,
+          };
+        });
       } catch (err) {
         console.warn('[getProjectById] Failed to fetch team members from Clerk:', err);
       }
     }
 
+    const userMemberRecord = project.members?.find((m: any) => m.userId === userId);
+    const currentUserRole =
+      userId === project.ownerId ? 'Admin' : userMemberRecord?.role || 'Member';
+
     return res.status(200).json({
       success: true,
       data: {
         ...project,
+        currentUserRole,
         teamMemberProfiles,
       },
     });
@@ -303,7 +317,7 @@ export async function getProjectById(req: Request, res: Response) {
 
 /**
  * PATCH /api/v1/projects/:id
- * Update project metadata, status, brief, goals, or milestones.
+ * Update project metadata, status, brief, goals, or milestones (Admin or Moderator).
  */
 export async function updateProject(req: Request, res: Response) {
   try {
@@ -346,23 +360,13 @@ export async function updateProject(req: Request, res: Response) {
       });
     }
 
-    // Verify workspace membership and permissions
-    const workspace = await Workspace.findById(project.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    if (!callerMember) {
+    const userRecord = project.members?.find((m) => m.userId === userId);
+    const userRole = userId === project.ownerId ? 'Admin' : userRecord?.role;
+
+    if (userRole !== 'Admin' && userRole !== 'Moderator') {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'You do not have permission to edit this project' },
-      });
-    }
-
-    const isPrivileged = callerMember.role === 'owner' || callerMember.role === 'admin' || workspace?.ownerId === userId;
-    const isTeamMember = project.teamMembers?.includes(userId);
-
-    if (project.privacy === 'Private' && !isTeamMember && !isPrivileged) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'This project is private and can only be updated by assigned team members' },
+        error: { code: 'FORBIDDEN', message: 'Only Admins and Moderators can edit project details' },
       });
     }
 
@@ -371,49 +375,24 @@ export async function updateProject(req: Request, res: Response) {
     if (updates.description !== undefined) project.description = updates.description.trim();
     if (updates.status) project.status = updates.status;
     if (updates.privacy) project.privacy = updates.privacy;
+
     if (updates.members && updates.members.length > 0) {
-      project.members = updates.members as any;
-      project.teamMembers = updates.members.map((m: any) => m.userId);
-    } else if (updates.teamMembers) {
-      project.teamMembers = updates.teamMembers;
-      const existingMap = new Map<string, 'Admin' | 'Member' | 'Viewer'>();
-      (project.members || []).forEach((m: any) => existingMap.set(m.userId, m.role));
-      project.members = updates.teamMembers.map((uid) => ({
-        userId: uid,
-        role: existingMap.get(uid) || 'Member',
-      })) as any;
+      project.members = updates.members.map((m) => ({
+        userId: m.userId,
+        role: m.role as any,
+        joinedAt: new Date(),
+      }));
+      project.teamMembers = updates.members.map((m) => m.userId);
     }
+
     if (updates.goals) project.goals = updates.goals as any;
     if (updates.milestones) project.milestones = updates.milestones as any;
 
     await project.save();
 
-    // Fetch profile details for team members from Clerk with project role
-    let teamMemberProfiles: Array<{ userId: string; name?: string; email?: string; imageUrl?: string; projectRole?: 'Admin' | 'Member' | 'Viewer' }> = [];
-    if (project.teamMembers && project.teamMembers.length > 0) {
-      try {
-        const clerkUsers = await clerkClient.users.getUserList({ userId: project.teamMembers, limit: 50 });
-        const memberRoleMap = new Map<string, 'Admin' | 'Member' | 'Viewer'>();
-        (project.members || []).forEach((m: any) => memberRoleMap.set(m.userId, m.role));
-
-        teamMemberProfiles = clerkUsers.data.map((u) => ({
-          userId: u.id,
-          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Team Member',
-          email: u.emailAddresses?.[0]?.emailAddress,
-          imageUrl: u.imageUrl,
-          projectRole: memberRoleMap.get(u.id) || (u.id === workspace?.ownerId ? 'Admin' : 'Member'),
-        }));
-      } catch (err) {
-        console.warn('[updateProject] Failed to fetch team members from Clerk:', err);
-      }
-    }
-
     return res.status(200).json({
       success: true,
-      data: {
-        ...project.toObject(),
-        teamMemberProfiles,
-      },
+      data: project,
     });
   } catch (error: any) {
     console.error('[ProjectController] updateProject error:', error);
@@ -425,8 +404,188 @@ export async function updateProject(req: Request, res: Response) {
 }
 
 /**
+ * PATCH /api/v1/projects/:id/members/:targetUserId/role
+ * Update member role (Admin only).
+ */
+export async function updateMemberRole(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
+      });
+    }
+
+    const { id, targetUserId } = req.params;
+    const { role } = req.body;
+
+    if (!['Admin', 'Moderator', 'Member'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid role. Allowed: Admin, Moderator, Member' },
+      });
+    }
+
+    const project = await Project.findOne({ _id: id, deletedAt: null });
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    const callerRecord = project.members?.find((m) => m.userId === userId);
+    const callerRole = userId === project.ownerId ? 'Admin' : callerRecord?.role;
+
+    if (callerRole !== 'Admin') {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only Project Admins can manage member roles' },
+      });
+    }
+
+    const targetMember = project.members.find((m) => m.userId === targetUserId);
+    if (targetMember) {
+      targetMember.role = role as any;
+    } else {
+      project.members.push({
+        userId: targetUserId,
+        role: role as any,
+        joinedAt: new Date(),
+      });
+      if (!project.teamMembers.includes(targetUserId)) {
+        project.teamMembers.push(targetUserId);
+      }
+    }
+
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      data: { userId: targetUserId, role },
+    });
+  } catch (error: any) {
+    console.error('[ProjectController] updateMemberRole error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to update member role' },
+    });
+  }
+}
+
+/**
+ * DELETE /api/v1/projects/:id/members/:targetUserId
+ * Remove member from project or leave project.
+ */
+export async function removeMember(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
+      });
+    }
+
+    const { id, targetUserId } = req.params;
+
+    const project = await Project.findOne({ _id: id, deletedAt: null });
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    const callerRecord = project.members?.find((m) => m.userId === userId);
+    const callerRole = userId === project.ownerId ? 'Admin' : callerRecord?.role;
+
+    const isSelfLeaving = userId === targetUserId;
+    if (!isSelfLeaving && callerRole !== 'Admin') {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only Project Admins can remove members' },
+      });
+    }
+
+    project.members = project.members.filter((m) => m.userId !== targetUserId);
+    project.teamMembers = project.teamMembers.filter((uid) => uid !== targetUserId);
+
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      data: { message: 'Member removed successfully' },
+    });
+  } catch (error: any) {
+    console.error('[ProjectController] removeMember error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to remove member' },
+    });
+  }
+}
+
+/**
+ * POST /api/v1/projects/:id/join-code/reset
+ * Regenerate join code (Admin only).
+ */
+export async function regenerateJoinCode(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
+      });
+    }
+    const { id } = req.params;
+
+    const project = await Project.findOne({ _id: id, deletedAt: null });
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    const callerRecord = project.members?.find((m) => m.userId === userId);
+    const callerRole = userId === project.ownerId ? 'Admin' : callerRecord?.role;
+
+    if (callerRole !== 'Admin') {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only Project Admins can reset the join code' },
+      });
+    }
+
+    let newCode = generateJoinCode();
+    let existingCode = await Project.findOne({ joinCode: newCode }).lean();
+    while (existingCode) {
+      newCode = generateJoinCode();
+      existingCode = await Project.findOne({ joinCode: newCode }).lean();
+    }
+
+    project.joinCode = newCode;
+    await project.save();
+
+    return res.status(200).json({
+      success: true,
+      data: { joinCode: newCode },
+    });
+  } catch (error: any) {
+    console.error('[ProjectController] regenerateJoinCode error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to reset join code' },
+    });
+  }
+}
+
+/**
  * DELETE /api/v1/projects/:id
- * Soft delete or archive a project.
+ * Soft delete a project and cascade to tasks.
  */
 export async function deleteProject(req: Request, res: Response) {
   try {
@@ -439,13 +598,6 @@ export async function deleteProject(req: Request, res: Response) {
     }
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid project ID required' },
-      });
-    }
-
     const project = await Project.findOne({ _id: id, deletedAt: null });
     if (!project) {
       return res.status(404).json({
@@ -454,22 +606,20 @@ export async function deleteProject(req: Request, res: Response) {
       });
     }
 
-    // Verify caller is admin or owner of the workspace
-    const workspace = await Workspace.findById(project.workspaceId).lean();
-    const callerMember = workspace?.members.find((m) => m.userId === userId);
-    const isPrivileged = callerMember?.role === 'owner' || callerMember?.role === 'admin';
+    const callerRecord = project.members?.find((m) => m.userId === userId);
+    const callerRole = userId === project.ownerId ? 'Admin' : callerRecord?.role;
 
-    if (!isPrivileged) {
+    if (callerRole !== 'Admin') {
       return res.status(403).json({
         success: false,
-        error: { code: 'FORBIDDEN', message: 'Only workspace admins or owners can delete projects' },
+        error: { code: 'FORBIDDEN', message: 'Only Project Admins can delete projects' },
       });
     }
 
     project.deletedAt = new Date();
     await project.save();
 
-    // Cascade soft-delete all tasks belonging to this project
+    // Cascade soft delete all tasks in project
     await Task.updateMany(
       { projectId: project._id, deletedAt: null },
       { deletedAt: new Date() }
@@ -477,7 +627,7 @@ export async function deleteProject(req: Request, res: Response) {
 
     return res.status(200).json({
       success: true,
-      data: { id: project._id, message: 'Project archived successfully' },
+      data: { id: project._id, message: 'Project deleted successfully' },
     });
   } catch (error: any) {
     console.error('[ProjectController] deleteProject error:', error);

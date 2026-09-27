@@ -1,40 +1,38 @@
 'use client';
 
-import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus, Loader2 } from 'lucide-react';
+import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { TaskCard } from '@/components/shared/TaskCard';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
-import { useWorkspace } from '@/hooks/useWorkspace';
+import { TaskDetailModal } from '@/components/task/TaskDetailModal';
 import { useProjects } from '@/hooks/useProjects';
 import { fetchMyTasks } from '@/lib/api/task.api';
 import { Task } from '@synca/types';
 
-
-
 export default function DashboardPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { activeWorkspace } = useWorkspace();
   const { projects } = useProjects();
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Overdue' | 'Completed'>('Upcoming');
   const [greeting, setGreeting] = useState('Good Evening');
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     async function loadTasks() {
-      if (!activeWorkspace?._id) return;
       try {
         const token = await getToken();
         if (!token) return;
-        const fetched = await fetchMyTasks(activeWorkspace._id, token);
+        const fetched = await fetchMyTasks(token);
         if (isMounted) {
           setLiveTasks(fetched);
         }
       } catch (err) {
-        console.warn('[DashboardPage] Could not load live tasks, using fallbacks:', err);
+        console.warn('[DashboardPage] Could not load live tasks:', err);
       }
     }
     loadTasks();
@@ -51,7 +49,7 @@ export default function DashboardPage() {
       window.removeEventListener('synca:projects-changed', handleSync);
       window.removeEventListener('synca:tasks-changed', handleSync);
     };
-  }, [activeWorkspace?._id, getToken]);
+  }, [getToken]);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -85,19 +83,22 @@ export default function DashboardPage() {
   const validTasks = useMemo(() => {
     return liveTasks.filter((t) => {
       if (!t.projectId) return true; // Personal task
-      return projects.some((p) => p._id === t.projectId);
+      return projects.some((p) => String(p._id) === String(t.projectId));
     });
   }, [liveTasks, projects]);
 
   const getProjectName = (projectId?: string | null) => {
     if (!projectId) return 'Personal Task';
-    const found = projects.find((p) => p._id === projectId);
+    const found = projects.find((p) => String(p._id) === String(projectId));
     return found?.name || 'Active Project';
   };
 
   const displayedUpcoming = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     return validTasks
-      .filter((t) => t.status !== 'Done' && (!t.dueDate || new Date(t.dueDate) >= new Date()))
+      .filter((t) => t.status !== 'Done' && (!t.dueDate || new Date(t.dueDate) >= todayStart))
       .map((t) => ({
         id: t._id,
         title: t.title,
@@ -110,8 +111,11 @@ export default function DashboardPage() {
   }, [validTasks, projects]);
 
   const displayedOverdue = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     return validTasks
-      .filter((t) => t.status !== 'Done' && t.dueDate && new Date(t.dueDate) < new Date())
+      .filter((t) => t.status !== 'Done' && t.dueDate && new Date(t.dueDate) < todayStart)
       .map((t) => ({
         id: t._id,
         title: t.title,
@@ -265,15 +269,26 @@ export default function DashboardPage() {
           <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 scrollbar-none">
             {currentTasks.length > 0 ? (
               currentTasks.map((task) => (
-                <TaskCard
+                <div
                   key={task.id}
-                  title={task.title}
-                  projectName={task.project}
-                  dueDate={task.dueDate}
-                  status={task.status}
-                  tag={task.tag}
-                  bgVariant={task.bgVariant}
-                />
+                  onClick={() => {
+                    const fullTask = liveTasks.find((t) => String(t._id) === String(task.id));
+                    if (fullTask) {
+                      setSelectedTask(fullTask);
+                      setIsDetailModalOpen(true);
+                    }
+                  }}
+                  className="cursor-pointer"
+                >
+                  <TaskCard
+                    title={task.title}
+                    projectName={task.project}
+                    dueDate={task.dueDate}
+                    status={task.status}
+                    tag={task.tag}
+                    bgVariant={task.bgVariant}
+                  />
+                </div>
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
@@ -285,7 +300,7 @@ export default function DashboardPage() {
                     No {activeTab.toLowerCase()} tasks
                   </p>
                   <p className="text-xs text-zinc-400 mt-1 max-w-[220px]">
-                    Tasks assigned to you in this workspace will automatically appear here.
+                    Tasks assigned to you across your projects will automatically appear here.
                   </p>
                 </div>
                 <Link
@@ -347,10 +362,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right Column: Ongoing Projects & Team Members */}
+        {/* Right Column: Ongoing Projects */}
         <div className="space-y-6 flex flex-col">
           {/* Ongoing Projects */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] space-y-5 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm">
+          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-6 border border-zinc-200/80 dark:border-white/[0.08] space-y-5 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm flex-1">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100 font-funnel">Ongoing Projects</h2>
               <Link
@@ -363,11 +378,11 @@ export default function DashboardPage() {
 
             <div className="space-y-4">
               {projects.length > 0 ? (
-                projects.slice(0, 3).map((proj) => (
+                projects.slice(0, 5).map((proj) => (
                   <Link
                     key={proj._id}
                     href={`/projects/${proj._id}`}
-                    className="flex items-center gap-4 py-0.5 cursor-pointer group"
+                    className="flex items-center gap-4 py-1 cursor-pointer group"
                   >
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-xs">
                       {proj.name.substring(0, 2).toUpperCase()}
@@ -376,19 +391,21 @@ export default function DashboardPage() {
                       <h4 className="text-base font-normal text-zinc-900 dark:text-zinc-100 truncate font-funnel group-hover:text-emerald-500 transition-colors">
                         {proj.name}
                       </h4>
-                      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-normal font-sans">
-                        Status: <span className="capitalize">{proj.status}</span>
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500 font-normal font-sans flex items-center gap-2">
+                        <span>Code: <span className="font-mono text-zinc-300">{proj.joinCode}</span></span>
+                        <span>•</span>
+                        <span className="capitalize">{proj.status}</span>
                       </p>
                     </div>
                   </Link>
                 ))
               ) : (
-                <div className="py-8 flex flex-col items-center justify-center text-center space-y-2">
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-2">
                   <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-white/[0.04] flex items-center justify-center text-zinc-400">
                     <FolderGit2 className="w-5 h-5 text-blue-500/60" />
                   </div>
                   <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">No active projects yet</p>
-                  <p className="text-[11px] text-zinc-400">Launch an initiative in this workspace to track it.</p>
+                  <p className="text-[11px] text-zinc-400">Launch or join an initiative to track it here.</p>
                   <Link
                     href="/projects"
                     className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#d8f870] text-zinc-950 hover:bg-[#c4ea48] transition-colors shadow-sm"
@@ -400,73 +417,30 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-
-          {/* Team Members */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl p-5 border border-zinc-200/80 dark:border-white/[0.08] space-y-4 flex-1 hover:border-zinc-300/80 dark:hover:border-white/[0.15] transition-all duration-300 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Team Members</h2>
-              <Link href="/chats" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-                Open Chats →
-              </Link>
-            </div>
-
-            <div className="space-y-2.5 flex-1">
-              {activeWorkspace?.members && activeWorkspace.members.length > 0 ? (
-                activeWorkspace.members.slice(0, 4).map((member) => {
-                  const isCurrentUser = member.userId === user?.id;
-                  const name = isCurrentUser
-                    ? (user?.fullName || member.name || 'You')
-                    : (member.name || member.email || 'Team Member');
-                  const avatarUrl = isCurrentUser ? (user?.imageUrl || member.imageUrl) : member.imageUrl;
-                  const initials = name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
-
-                  return (
-                    <Link
-                      key={member.userId}
-                      href="/chats"
-                      className="flex items-center gap-3 p-2 rounded-2xl bg-zinc-50/50 dark:bg-white/[0.03] border border-zinc-100/50 dark:border-white/[0.06] hover:bg-zinc-100/60 dark:hover:bg-white/[0.07] transition-all cursor-pointer hover:scale-[1.01] group/chat"
-                    >
-                      <div className="relative flex-shrink-0">
-                        {avatarUrl ? (
-                          <img
-                            src={avatarUrl}
-                            alt={name}
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center">
-                            {initials}
-                          </div>
-                        )}
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-[#16191e]" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate pr-2">
-                            {name}{isCurrentUser ? ' (You)' : ''}
-                          </h4>
-                          <span className="text-[10px] text-zinc-400 capitalize">
-                            {member.role || 'Member'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                          {member.email || 'Workspace Member'}
-                        </p>
-                      </div>
-                    </Link>
-                  );
-                })
-              ) : (
-                <div className="py-6 text-center text-zinc-400 text-xs">
-                  No other members in this workspace.
-                </div>
-              )}
-            </div>
-          </div>
-
         </div>
 
+        {/* Task Detail Modal */}
+        <TaskDetailModal
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          task={selectedTask}
+          projectName={
+            selectedTask?.projectId
+              ? projects.find((p) => String(p._id) === String(selectedTask.projectId))?.name ||
+                'Active Project'
+              : 'Personal Task'
+          }
+          onTaskUpdated={() => {
+            getToken().then((token) => {
+              if (token) fetchMyTasks(token).then(setLiveTasks);
+            });
+          }}
+          onTaskDeleted={() => {
+            getToken().then((token) => {
+              if (token) fetchMyTasks(token).then(setLiveTasks);
+            });
+          }}
+        />
       </div>
     </div>
   );

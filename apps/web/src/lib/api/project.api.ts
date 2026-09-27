@@ -47,24 +47,24 @@ export interface ProjectFilters {
 }
 
 export interface EnrichedProject extends Project {
+  currentUserRole?: 'Admin' | 'Moderator' | 'Member';
   teamMemberProfiles?: Array<{
     userId: string;
     name?: string;
     email?: string;
     imageUrl?: string;
-    projectRole?: 'Admin' | 'Member' | 'Viewer';
+    projectRole?: 'Admin' | 'Moderator' | 'Member';
   }>;
 }
 
 /**
- * List all projects for a workspace with optional status & search query.
+ * List all projects the user belongs to.
  */
-export async function fetchWorkspaceProjects(
-  workspaceId: string,
+export async function fetchUserProjects(
   token: string,
   filters?: ProjectFilters
 ): Promise<Project[]> {
-  const params = new URLSearchParams({ workspaceId });
+  const params = new URLSearchParams();
   if (filters?.status && filters.status !== 'All') {
     params.append('status', filters.status);
   }
@@ -72,11 +72,27 @@ export async function fetchWorkspaceProjects(
     params.append('search', filters.search.trim());
   }
 
-  const res = await fetch(`${API_BASE_URL}/api/v1/projects?${params.toString()}`, {
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${API_BASE_URL}/api/v1/projects${queryString}`, {
     method: 'GET',
     headers: getHeaders(token),
   });
   return handleResponse<Project[]>(res);
+}
+
+/**
+ * Join an existing project using a 6-character join code.
+ */
+export async function joinProjectApi(
+  joinCode: string,
+  token: string
+): Promise<Project> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/projects/join`, {
+    method: 'POST',
+    headers: getHeaders(token),
+    body: JSON.stringify({ joinCode }),
+  });
+  return handleResponse<Project>(res);
 }
 
 /**
@@ -94,7 +110,7 @@ export async function fetchProjectById(
 }
 
 /**
- * Create a new project in the active workspace.
+ * Create a new top-level project.
  */
 export async function createProjectApi(
   data: CreateProjectInput,
@@ -122,6 +138,61 @@ export async function updateProjectApi(
     body: JSON.stringify(data),
   });
   return handleResponse<Project>(res);
+}
+
+/**
+ * Update member role in project (Admin only).
+ */
+export async function updateMemberRoleApi(
+  projectId: string,
+  targetUserId: string,
+  role: 'Admin' | 'Moderator' | 'Member',
+  token: string
+): Promise<{ userId: string; role: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/projects/${projectId}/members/${targetUserId}/role`,
+    {
+      method: 'PATCH',
+      headers: getHeaders(token),
+      body: JSON.stringify({ role }),
+    }
+  );
+  return handleResponse<{ userId: string; role: string }>(res);
+}
+
+/**
+ * Remove member from project or leave project.
+ */
+export async function removeMemberApi(
+  projectId: string,
+  targetUserId: string,
+  token: string
+): Promise<{ message: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/projects/${projectId}/members/${targetUserId}`,
+    {
+      method: 'DELETE',
+      headers: getHeaders(token),
+    }
+  );
+  return handleResponse<{ message: string }>(res);
+}
+
+/**
+ * Reset join code for a project (Admin only).
+ */
+export async function regenerateJoinCodeApi(
+  projectId: string,
+  token: string
+): Promise<{ joinCode: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/projects/${projectId}/join-code/reset`,
+    {
+      method: 'POST',
+      headers: getHeaders(token),
+    }
+  );
+  return handleResponse<{ joinCode: string }>(res);
 }
 
 /**
