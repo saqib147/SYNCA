@@ -99,3 +99,28 @@ export const getTeammates = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * GET /api/v1/users/:userId/profile
+ * Returns public profile (name & avatar) for a specific user.
+ */
+export const getUserProfile = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'User ID is required' } });
+    }
+    const profile = await fetchProfile(userId);
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId,
+        name: profile.name,
+        avatarUrl: profile.avatar,
+      },
+    });
+  } catch (err) {
+    console.error('[getUserProfile]', err);
+    return res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to load profile' } });
+  }
+};
+

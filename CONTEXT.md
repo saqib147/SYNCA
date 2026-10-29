@@ -87,7 +87,14 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Project Member / Uploader |
 | `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | Uploader / Admin |
 
-### 3.5 System & Webhooks
+### 3.5 Users (`/api/v1/users`)
+
+| Method | Endpoint | Description | Auth / Permission |
+|---|---|---|---|
+| `GET` | `/api/v1/users/teammates` | Get unique project collaborators enriched with Clerk profiles | Authenticated |
+| `GET` | `/api/v1/users/:userId/profile` | Get individual user display profile (name & avatar) | Authenticated |
+
+### 3.6 System & Webhooks
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|

@@ -147,15 +147,15 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
         playNotificationChime();
 
         // Lookup project name if channel
-        let title = msg.senderName || 'Teammate';
+        let title = msg.senderName || 'Direct Message';
         let subtitle = 'Direct Message';
-        let linkHref = `/chats?dm=${msg.senderId}&name=${encodeURIComponent(msg.senderName || 'Teammate')}`;
+        let linkHref = `/chats?dm=${msg.senderId}${msg.senderName ? `&name=${encodeURIComponent(msg.senderName)}` : ''}${msg.senderAvatar ? `&avatar=${encodeURIComponent(msg.senderAvatar)}` : ''}`;
 
         if (isChannel) {
           const foundProj = projectsRef.current.find((p) => String(p._id) === channelTargetId);
           const projName = foundProj?.name || 'Project';
           title = `#${projName}`;
-          subtitle = `${msg.senderName || 'Teammate'} in general`;
+          subtitle = msg.senderName ? `${msg.senderName} in #general` : 'New message in #general';
           linkHref = `/projects/${channelTargetId}?tab=conversation`;
         }
 

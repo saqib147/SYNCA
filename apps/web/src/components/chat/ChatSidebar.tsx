@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Project } from '@synca/types';
 import { useSocket } from '@/context/SocketContext';
 import { useChatNotifications } from '@/context/ChatNotificationContext';
+import { useTeammates } from '@/hooks/useTeammates';
 import { cn } from '@/lib/utils';
 
 export interface ConversationTarget {
@@ -34,58 +35,8 @@ export function ChatSidebar({
   const [search, setSearch] = useState('');
   const { onlineUsers } = useSocket();
   const { unreadCounts, markAsRead } = useChatNotifications();
-
-  // Extract distinct team members from joined projects
-  const teamMembers = useMemo(() => {
-    const map = new Map<string, { userId: string; name: string; avatarUrl?: string; role?: string }>();
-
-    for (const p of projects) {
-      if (p.ownerId && p.ownerId !== currentUserId && !map.has(p.ownerId)) {
-        map.set(p.ownerId, {
-          userId: p.ownerId,
-          name: `Project Owner (${p.name})`,
-          role: 'Admin',
-        });
-      }
-      if (p.members && Array.isArray(p.members)) {
-        for (const m of p.members) {
-          if (m.userId && m.userId !== currentUserId && !map.has(m.userId)) {
-            map.set(m.userId, {
-              userId: m.userId,
-              name: `Teammate (${m.role || 'Member'})`,
-              role: m.role || 'Member',
-            });
-          }
-        }
-      }
-      if (p.teamMembers && Array.isArray(p.teamMembers)) {
-        for (const uid of p.teamMembers) {
-          if (uid && uid !== currentUserId && !map.has(uid)) {
-            map.set(uid, {
-              userId: uid,
-              name: `Member ${uid.slice(-4)}`,
-              role: 'Member',
-            });
-          }
-        }
-      }
-    }
-
-    // Default sample members if user is the sole member on a new workspace
-    if (map.size === 0) {
-      const fallback = [
-        { userId: 'user_saqib_dev', name: 'Saqib Arshad', role: 'Full-Stack Developer' },
-        { userId: 'user_malaika_dev', name: 'Malaika Tabassum', role: 'Game Developer' },
-        { userId: 'user_ayesha_dev', name: 'Ayesha A.', role: 'Web Developer' },
-        { userId: 'user_haris_dev', name: 'Haris Hashim', role: 'Business Developer' },
-      ];
-      for (const f of fallback) {
-        map.set(f.userId, f);
-      }
-    }
-
-    return Array.from(map.values());
-  }, [projects, currentUserId]);
+  const { teammates } = useTeammates();
+  const teamMembers = teammates;
 
   // Total unreads per category
   const dmUnreads = useMemo(() => {
@@ -207,7 +158,7 @@ export function ChatSidebar({
                       type: 'dm',
                       id: member.userId,
                       name: member.name,
-                      subtitle: member.role || 'Teammate',
+                      subtitle: isOnline ? 'Active now' : 'Offline',
                       avatarUrl: member.avatarUrl,
                       isOnline,
                     })
@@ -244,7 +195,7 @@ export function ChatSidebar({
                       )}
                     </div>
                     <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
-                      {isOnline ? 'Active now' : member.role || 'Offline'}
+                      {isOnline ? 'Active now' : 'Offline'}
                     </p>
                   </div>
                 </button>

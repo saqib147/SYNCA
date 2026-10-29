@@ -11,11 +11,10 @@ import {
   MessageSquare,
   Loader2,
   ArrowLeft,
-  Wifi,
-  WifiOff,
   Users,
 } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
+import { useTeammates } from '@/hooks/useTeammates';
 import { useSocket } from '@/context/SocketContext';
 import { useChatNotifications } from '@/context/ChatNotificationContext';
 import { useChat } from '@/hooks/useChat';
@@ -155,16 +154,69 @@ function ChatStream({ target }: { target: ConversationTarget }) {
 // ─────────────────────────────────────────────
 // DM mode — full-width, no Hub sidebar
 // ─────────────────────────────────────────────
-function DirectChatView({ peerId, peerName }: { peerId: string; peerName: string }) {
+function DirectChatView({
+  peerId,
+  peerName,
+  peerAvatar,
+}: {
+  peerId: string;
+  peerName?: string;
+  peerAvatar?: string;
+}) {
   const router = useRouter();
-  const { isConnected } = useSocket();
+  const { getToken } = useAuth();
   const { onlineUsers } = useSocket();
+  const { teammates } = useTeammates();
   const isOnline = Boolean(onlineUsers[peerId]);
+
+  // Teammate lookup from cache
+  const peerTeammate = teammates.find((t) => t.userId === peerId);
+
+  // Profile state for direct / fetched resolution
+  const [profile, setProfile] = useState<{ name: string; avatarUrl: string } | null>(null);
+
+  useEffect(() => {
+    if (peerTeammate?.name) return; // already resolved
+    let mounted = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await window.fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/v1/users/${peerId}/profile`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok) {
+          const body = await res.json();
+          if (mounted && body.data) {
+            setProfile({ name: body.data.name, avatarUrl: body.data.avatarUrl });
+          }
+        }
+      } catch (err) {
+        console.error('[DirectChatView] fetchProfile error:', err);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [peerId, peerTeammate?.name, getToken]);
+
+  const resolvedName =
+    peerTeammate?.name ||
+    profile?.name ||
+    (peerName && peerName !== 'Teammate' ? peerName : '') ||
+    'Direct Message';
+
+  const resolvedAvatar =
+    peerTeammate?.avatarUrl ||
+    profile?.avatarUrl ||
+    peerAvatar ||
+    undefined;
 
   const target: ConversationTarget = {
     type: 'dm',
     id: peerId,
-    name: peerName,
+    name: resolvedName,
+    avatarUrl: resolvedAvatar,
     subtitle: isOnline ? 'Active now' : 'Offline',
     isOnline,
   };
@@ -189,9 +241,9 @@ function DirectChatView({ peerId, peerName }: { peerId: string; peerName: string
             <div className="relative flex-shrink-0">
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden">
                 {target.avatarUrl ? (
-                  <img src={target.avatarUrl} alt={peerName} className="w-full h-full object-cover" />
+                  <img src={target.avatarUrl} alt={target.name} className="w-full h-full object-cover" />
                 ) : (
-                  peerName.charAt(0).toUpperCase()
+                  target.name.charAt(0).toUpperCase()
                 )}
               </div>
               <span
@@ -204,19 +256,10 @@ function DirectChatView({ peerId, peerName }: { peerId: string; peerName: string
 
             {/* Name & status */}
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{peerName}</h2>
-              <div className="flex items-center gap-1 text-[11px]">
-                {isConnected ? (
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                    <Wifi className="w-3 h-3" />
-                    {isOnline ? 'Active now' : 'Real-time active'}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-amber-500">
-                    <WifiOff className="w-3 h-3" /> Connecting…
-                  </span>
-                )}
-              </div>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{target.name}</h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {isOnline ? 'Active now' : 'Offline'}
+              </p>
             </div>
           </div>
 
@@ -315,17 +358,13 @@ function MessagesHubView() {
                 <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
                   {activeTarget.name}
                 </h2>
-                <div className="flex items-center gap-1 text-[11px]">
-                  {isConnected ? (
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                      <Wifi className="w-3 h-3" /> Real-time active
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-amber-500">
-                      <WifiOff className="w-3 h-3" /> Connecting…
-                    </span>
-                  )}
-                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                  {activeTarget.type === 'channel'
+                    ? activeTarget.subtitle || 'Project channel'
+                    : activeTarget.isOnline
+                    ? 'Active now'
+                    : 'Offline'}
+                </p>
               </div>
             </div>
 
@@ -372,13 +411,15 @@ function ChatsContent() {
   const searchParams = useSearchParams();
   const dmParam = searchParams.get('dm');
   const nameParam = searchParams.get('name');
+  const avatarParam = searchParams.get('avatar');
 
   // Direct DM link from sidebar → full-screen chat, no Hub
   if (dmParam) {
     return (
       <DirectChatView
         peerId={dmParam}
-        peerName={nameParam || 'Teammate'}
+        peerName={nameParam || undefined}
+        peerAvatar={avatarParam || undefined}
       />
     );
   }

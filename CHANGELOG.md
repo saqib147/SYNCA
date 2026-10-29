@@ -5,6 +5,27 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Chat Header & Teammate Discovery Polish] - 2026-10-29
+
+### Changed & Polished
+- **Eliminated All "Teammate" & "Role" Fallbacks**:
+  - `DirectChatView` in [`chats/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/chats/page.tsx) now dynamically resolves the peer user's authentic Clerk name and avatar image from `useTeammates()` or on-demand fetch via `/api/v1/users/:userId/profile`.
+  - Fixed missing `avatarUrl` passing to `target` in `DirectChatView`, ensuring both header and contact drawer render authentic Clerk photos.
+  - Added query param support (`&name=...&avatar=...`) in [`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx) and [`NewMessageModal.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/NewMessageModal.tsx).
+  - Added `GET /api/v1/users/:userId/profile` endpoint in `user.controller.ts` and `user.routes.ts`.
+- **Removed Wifi Real-Time Indicator**:
+  - Removed the `Wifi` / `WifiOff` "Real-time active" / "Connecting..." indicator from the top header in both `DirectChatView` and `MessagesHubView` ([`chats/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/chats/page.tsx)).
+  - Replaced it with a clean, unobtrusive presence indicator (`Active now` / `Offline` or channel subtitle).
+- **Direct Messages Sidebar Item Simplification**:
+  - Removed the `role` subtitle ("Member") from inline Direct Message items in [`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx).
+  - Cleaned up unused `useMemo` and `useAuth` imports in `Sidebar.tsx`.
+- **Real Teammate Profile Resolution Everywhere**:
+  - Connected `ChatSidebar.tsx` and `NewMessageModal.tsx` to `useTeammates()` backed by `GET /api/v1/users/teammates`.
+  - Replaced all stubbed names (`Teammate (Member)`) and sample fallbacks with live Clerk display names and avatar images.
+  - Removed role subtitles across 1:1 conversation lists in both the Messages Hub and New Message search modal.
+- **API Documentation & Registry**:
+  - Added `GET /api/v1/users/teammates` to `docs/api.md` and `CONTEXT.md` (Section 3.5).
+
 ## [Direct Chat — Full-Screen DM View] - 2026-10-29
 
 ### Changed

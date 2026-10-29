@@ -179,6 +179,43 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
 #### `DELETE /api/v1/files/:id`
 - Delete FileRef + Cloudinary asset. Uploader or project Admin.
 
+### 2.5 Users (`/api/v1/users`)
+
+#### `GET /api/v1/users/teammates`
+- **Description**: Returns all unique project collaborators across all projects the caller belongs to, enriched with real Clerk names, avatars, and shared project lists.
+- **Auth**: Requires valid Clerk Bearer JWT.
+- **Response `200`**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "teammates": [
+        {
+          "userId": "user_3H8dfmBaTOO54JOeiaM1A4foyNR",
+          "name": "Saqib Arshad",
+          "avatarUrl": "https://img.clerk.com/...",
+          "sharedProjects": ["NewProject"]
+        }
+      ]
+    }
+  }
+  ```
+
+#### `GET /api/v1/users/:userId/profile`
+- **Description**: Returns authenticated public profile info (name and avatar URL) for any user by Clerk ID.
+- **Auth**: Requires valid Clerk Bearer JWT.
+- **Response `200`**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "userId": "user_3H8dfmBaTOO54JOeiaM1A4foyNR",
+      "name": "Saqib Arshad",
+      "avatarUrl": "https://img.clerk.com/..."
+    }
+  }
+  ```
+
 ---
 
 ## 3. WebSocket Event Protocols (Socket.io)

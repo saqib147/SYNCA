@@ -4,17 +4,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X, MessageSquare, Mail, Users, Loader2, AtSign } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
-import { useProjects } from '@/hooks/useProjects';
+import { useTeammates, Teammate } from '@/hooks/useTeammates';
 import { cn } from '@/lib/utils';
-
-interface Teammate {
-  userId: string;
-  name: string;
-  role?: string;
-  avatarUrl?: string;
-  projectNames: string[];
-}
 
 interface NewMessageModalProps {
   isOpen: boolean;
@@ -42,8 +33,7 @@ function getColor(userId: string) {
 
 export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
   const router = useRouter();
-  const { userId: currentUserId } = useAuth();
-  const { projects } = useProjects();
+  const { teammates, isLoading } = useTeammates();
 
   const [query, setQuery] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -69,63 +59,6 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  // --- Tier 1: Derive teammates from shared projects ---
-  const teammates = useMemo<Teammate[]>(() => {
-    const map = new Map<string, Teammate>();
-
-    for (const proj of projects) {
-      // ownerId
-      if (proj.ownerId && proj.ownerId !== currentUserId && !map.has(proj.ownerId)) {
-        map.set(proj.ownerId, {
-          userId: proj.ownerId,
-          name: `Project Owner`,
-          role: 'Admin',
-          projectNames: [proj.name],
-        });
-      } else if (proj.ownerId && proj.ownerId !== currentUserId && map.has(proj.ownerId)) {
-        map.get(proj.ownerId)!.projectNames.push(proj.name);
-      }
-
-      // members array (has .userId + .role)
-      if (Array.isArray(proj.members)) {
-        for (const m of proj.members as any[]) {
-          const uid = m.userId;
-          if (!uid || uid === currentUserId) continue;
-          if (!map.has(uid)) {
-            map.set(uid, {
-              userId: uid,
-              name: m.name || m.displayName || `Teammate`,
-              role: m.role || 'Member',
-              avatarUrl: m.avatarUrl || m.imageUrl,
-              projectNames: [proj.name],
-            });
-          } else {
-            map.get(uid)!.projectNames.push(proj.name);
-          }
-        }
-      }
-
-      // teamMembers string array (just userId)
-      if (Array.isArray(proj.teamMembers)) {
-        for (const uid of proj.teamMembers as string[]) {
-          if (!uid || uid === currentUserId) continue;
-          if (!map.has(uid)) {
-            map.set(uid, {
-              userId: uid,
-              name: `Member ${uid.slice(-4)}`,
-              role: 'Member',
-              projectNames: [proj.name],
-            });
-          } else {
-            map.get(uid)!.projectNames.push(proj.name);
-          }
-        }
-      }
-    }
-
-    return Array.from(map.values());
-  }, [projects, currentUserId]);
-
   // --- Tier 1 filter by display name / partial match ---
   const isEmailQuery = query.includes('@');
   const trimmedQuery = query.trim().toLowerCase();
@@ -137,7 +70,7 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
 
   const handleSelect = (teammate: Teammate) => {
     onClose();
-    router.push(`/chats?dm=${teammate.userId}&name=${encodeURIComponent(teammate.name)}`);
+    router.push(`/chats?dm=${teammate.userId}&name=${encodeURIComponent(teammate.name)}&avatar=${encodeURIComponent(teammate.avatarUrl || '')}`);
   };
 
   if (!isOpen || !mounted) return null;
@@ -246,10 +179,12 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
                           <p className="text-sm font-semibold text-zinc-200 group-hover:text-white truncate">
                             {teammate.name}
                           </p>
-                          <p className="text-[11px] text-zinc-500 truncate">
-                            {teammate.role} · {teammate.projectNames.slice(0, 2).join(', ')}
-                            {teammate.projectNames.length > 2 && ` +${teammate.projectNames.length - 2}`}
-                          </p>
+                          {teammate.sharedProjects && teammate.sharedProjects.length > 0 && (
+                            <p className="text-[11px] text-zinc-500 truncate">
+                              {teammate.sharedProjects.slice(0, 2).join(', ')}
+                              {teammate.sharedProjects.length > 2 && ` +${teammate.sharedProjects.length - 2}`}
+                            </p>
+                          )}
                         </div>
 
                         {/* CTA */}

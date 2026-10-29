@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -15,7 +15,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUser, useClerk, useAuth } from '@clerk/nextjs';
+import { useUser, useClerk } from '@clerk/nextjs';
 import { useProjects } from '@/hooks/useProjects';
 import { useTeammates } from '@/hooks/useTeammates';
 import { useChatNotifications } from '@/context/ChatNotificationContext';
@@ -65,7 +65,6 @@ export function Sidebar() {
   const { projects } = useProjects();
   const { teammates } = useTeammates();
   const { user, isLoaded } = useUser();
-  const { userId: currentUserId } = useAuth();
   const { signOut } = useClerk();
   const { totalUnreadCount, unreadCounts } = useChatNotifications();
   const { onlineUsers } = useSocket();
@@ -255,7 +254,7 @@ export function Sidebar() {
                   return (
                     <Link
                       key={member.userId}
-                      href={`/chats?dm=${member.userId}&name=${encodeURIComponent(member.name)}`}
+                      href={`/chats?dm=${member.userId}&name=${encodeURIComponent(member.name)}&avatar=${encodeURIComponent(member.avatarUrl || '')}`}
                       className={cn(
                         'flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-colors group cursor-pointer',
                         isDmActive
