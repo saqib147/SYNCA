@@ -207,69 +207,79 @@ export function TaskDetailModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-[#12161f] border border-zinc-700/80 rounded-3xl text-zinc-100 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[88vh]"
+        className="fixed inset-y-0 right-0 z-[10000] w-full max-w-2xl bg-[#11141e] border-l border-zinc-800 text-zinc-100 shadow-2xl flex flex-col h-full transform transition-all duration-300 ease-out animate-in slide-in-from-right"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Ambient Top Glow */}
         <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#8be6c1]/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Modal Header */}
-        <div className="p-6 pb-4 border-b border-zinc-800 flex items-start justify-between gap-4">
-          <div className="space-y-2 flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Project Badge */}
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
-                {projectName}
-              </span>
-
-              {/* Priority Pill */}
-              <span
-                className={cn(
-                  'px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase tracking-wider',
-                  task.priority === 'High'
-                    ? 'border-rose-500/40 bg-rose-500/10 text-rose-400'
-                    : task.priority === 'Medium'
-                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                    : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                )}
-              >
-                {task.priority} Priority
-              </span>
-
-              {/* Status Pill */}
-              <span
-                className={cn(
-                  'px-2.5 py-0.5 rounded-full text-[11px] font-semibold border',
-                  task.status === 'Done'
-                    ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
-                    : task.status === 'In Progress'
-                    ? 'border-blue-500/30 bg-blue-500/20 text-blue-300'
-                    : 'border-zinc-700 bg-zinc-800 text-zinc-300'
-                )}
-              >
-                {task.status}
-              </span>
-            </div>
-
-            <h2 className="text-xl font-bold text-zinc-100 leading-snug tracking-tight">
-              {task.title}
-            </h2>
+        {/* Asana-style Top Action Bar */}
+        <div className="p-4 sm:px-6 border-b border-zinc-800/80 bg-[#161a26]/70 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
+          {/* Left: Complete Toggle Button */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={!canInteract || isUpdatingStatus}
+              onClick={() => handleStatusChange(task.status === 'Done' ? 'In Progress' : 'Done')}
+              className={cn(
+                'flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 shadow-sm',
+                task.status === 'Done'
+                  ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                  : 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-400',
+                (!canInteract || isUpdatingStatus) && 'opacity-60 cursor-not-allowed'
+              )}
+            >
+              <CheckIcon className={cn('w-4 h-4', task.status === 'Done' ? 'text-emerald-400 stroke-[3]' : 'text-zinc-400')} />
+              <span>{task.status === 'Done' ? 'Completed' : 'Mark Complete'}</span>
+            </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors shrink-0"
-          >
-            <CloseIcon className="w-5 h-5" />
-          </button>
+          {/* Right: Actions & Close */}
+          <div className="flex items-center gap-1.5">
+            {canEditOrDelete && onEditTask && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditTask(task);
+                }}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                title="Edit Task"
+              >
+                <EditIcon className="w-4 h-4" />
+              </button>
+            )}
+
+            {canEditOrDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                title="Delete Task"
+              >
+                <TrashIcon className="w-4 h-4" />
+              </button>
+            )}
+
+            <div className="h-4 w-px bg-zinc-800 mx-1" />
+
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors shrink-0"
+              title="Close Panel"
+            >
+              <CloseIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Modal Scrollable Body */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-none">
+        {/* Drawer Scrollable Body */}
+        <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-zinc-700">
           {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -277,80 +287,126 @@ export function TaskDetailModal({
             </div>
           )}
 
-          {/* Quick Status Selector Bar */}
-          <div className="bg-[#1a1f2c] border border-zinc-700/60 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-              <ShieldIcon className="w-3.5 h-3.5 text-[#8be6c1]" />
-              <span>Task Status:</span>
+          {/* Project & Priority Badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+              {projectName}
             </span>
-
-            <div className="flex items-center gap-1.5">
-              {['To Do', 'In Progress', 'Done'].map((st) => (
-                <button
-                  key={st}
-                  disabled={!canInteract || isUpdatingStatus}
-                  onClick={() => handleStatusChange(st)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border',
-                    task.status === st
-                      ? 'bg-[#8be6c1] text-zinc-950 border-[#8be6c1] shadow-sm font-bold'
-                      : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white',
-                    (!canInteract || isUpdatingStatus) && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
+            <span
+              className={cn(
+                'px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase tracking-wider',
+                task.priority === 'High'
+                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-400'
+                  : task.priority === 'Medium'
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+              )}
+            >
+              {task.priority} Priority
+            </span>
+            <span
+              className={cn(
+                'px-2.5 py-0.5 rounded-full text-[11px] font-semibold border',
+                task.status === 'Done'
+                  ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
+                  : task.status === 'In Progress'
+                  ? 'border-blue-500/30 bg-blue-500/20 text-blue-300'
+                  : 'border-zinc-700 bg-zinc-800 text-zinc-300'
+              )}
+            >
+              {task.status}
+            </span>
           </div>
 
-          {/* Key Metadata Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#171b26] p-4 rounded-2xl border border-zinc-800">
-            {/* Due Date */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 shrink-0">
-                <CalendarIcon className="w-4.5 h-4.5 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Due Date</p>
-                <p className="text-xs font-semibold text-zinc-200 mt-0.5">{formattedDueDate}</p>
+          {/* Title */}
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight leading-snug">
+              {task.title}
+            </h1>
+          </div>
+
+          {/* Asana-style Properties Table */}
+          <div className="bg-[#171b26] p-4 sm:p-5 rounded-2xl border border-zinc-800 space-y-3.5">
+            {/* Status Property */}
+            <div className="grid grid-cols-3 items-center gap-2 text-xs">
+              <span className="text-zinc-400 font-medium flex items-center gap-2">
+                <ShieldIcon className="w-4 h-4 text-[#8be6c1]" />
+                <span>Status</span>
+              </span>
+              <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                {['To Do', 'In Progress', 'Done'].map((st) => (
+                  <button
+                    key={st}
+                    disabled={!canInteract || isUpdatingStatus}
+                    onClick={() => handleStatusChange(st)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
+                      task.status === st
+                        ? 'bg-[#8be6c1] text-zinc-950 border-[#8be6c1] shadow-sm font-bold'
+                        : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white',
+                      (!canInteract || isUpdatingStatus) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    {st}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Assignees Roster */}
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 shrink-0">
-                <UserIcon className="w-4.5 h-4.5 text-blue-400" />
+            {/* Assignee Property */}
+            <div className="grid grid-cols-3 items-center gap-2 text-xs">
+              <span className="text-zinc-400 font-medium flex items-center gap-2">
+                <UserIcon className="w-4 h-4 text-blue-400" />
+                <span>Assignees</span>
+              </span>
+              <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
+                {task.assignees && task.assignees.length > 0 ? (
+                  task.assignees.map((assigneeId) => {
+                    const m = members.find((mem) => mem.userId === assigneeId);
+                    const nameLabel = m?.name || m?.email || `Member (${assigneeId.slice(-4)})`;
+                    return (
+                      <span
+                        key={assigneeId}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-200"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="truncate max-w-[150px]">{nameLabel}</span>
+                      </span>
+                    );
+                  })
+                ) : (
+                  <span className="text-xs text-zinc-500 italic">No assignees</span>
+                )}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Assignees</p>
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {task.assignees && task.assignees.length > 0 ? (
-                    task.assignees.map((assigneeId) => {
-                      const m = members.find((mem) => mem.userId === assigneeId);
-                      const nameLabel = m?.name || m?.email || `Member (${assigneeId.slice(-4)})`;
-                      return (
-                        <span
-                          key={assigneeId}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-200"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                          <span className="truncate max-w-[120px]">{nameLabel}</span>
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <span className="text-xs text-zinc-500 italic">Unassigned</span>
-                  )}
-                </div>
+            </div>
+
+            {/* Due Date Property */}
+            <div className="grid grid-cols-3 items-center gap-2 text-xs">
+              <span className="text-zinc-400 font-medium flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-amber-400" />
+                <span>Due Date</span>
+              </span>
+              <div className="col-span-2 text-xs font-semibold text-zinc-200">
+                {formattedDueDate}
+              </div>
+            </div>
+
+            {/* Project Property */}
+            <div className="grid grid-cols-3 items-center gap-2 text-xs">
+              <span className="text-zinc-400 font-medium flex items-center gap-2">
+                <TagIcon className="w-4 h-4 text-purple-400" />
+                <span>Project</span>
+              </span>
+              <div className="col-span-2 text-xs font-semibold text-zinc-200">
+                {projectName}
               </div>
             </div>
           </div>
 
           {/* Description Section */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Description</h4>
-            <div className="p-4 rounded-2xl bg-[#171b26] border border-zinc-800 text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed min-h-[70px]">
+            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Description</h4>
+            <div className="p-4 rounded-2xl bg-[#171b26] border border-zinc-800 text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed min-h-[90px]">
               {task.description ? task.description : <span className="text-zinc-500 italic">No description provided.</span>}
             </div>
           </div>
@@ -359,13 +415,10 @@ export function TaskDetailModal({
           {totalSubtasksCount > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
                   <SubtaskIcon className="w-4 h-4 text-[#8be6c1]" />
-                  <span>Subtasks & Checklist</span>
+                  <span>Subtasks ({completedSubtasksCount}/{totalSubtasksCount})</span>
                 </h4>
-                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                  {completedSubtasksCount}/{totalSubtasksCount} completed
-                </span>
               </div>
 
               <div className="space-y-2">
@@ -400,14 +453,14 @@ export function TaskDetailModal({
           {/* Comments Section */}
           <div className="space-y-4 pt-4 border-t border-zinc-800">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
                 <CommentIcon className="w-4 h-4 text-blue-400" />
-                <span>Task Activity & Comments ({task.comments?.length || 0})</span>
+                <span>Comments & Activity ({task.comments?.length || 0})</span>
               </h4>
             </div>
 
             {/* Past Comments */}
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {task.comments && task.comments.length > 0 ? (
                 task.comments.map((comment, idx) => (
                   <div key={idx} className="p-3.5 rounded-2xl bg-[#171b26] border border-zinc-800 space-y-1.5">
@@ -445,7 +498,7 @@ export function TaskDetailModal({
               <form onSubmit={handleAddComment} className="flex gap-2 items-center">
                 <input
                   type="text"
-                  placeholder="Write a comment or status update..."
+                  placeholder="Ask a question or post an update..."
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   maxLength={1000}
@@ -470,8 +523,8 @@ export function TaskDetailModal({
           </div>
         </div>
 
-        {/* Modal Footer / Role-Gated Admin Controls */}
-        <div className="p-4 px-6 border-t border-zinc-800 bg-[#0f121a] rounded-b-3xl flex items-center justify-between gap-3">
+        {/* Drawer Footer */}
+        <div className="p-3.5 px-6 border-t border-zinc-800 bg-[#0f121a] flex items-center justify-between gap-3 shrink-0">
           <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
             <ShieldIcon className="w-3.5 h-3.5 text-zinc-400" />
             <span>
@@ -481,43 +534,13 @@ export function TaskDetailModal({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            {canEditOrDelete && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <TrashIcon className="w-3.5 h-3.5" />
-                  <span>Delete</span>
-                </button>
-
-                {onEditTask && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onEditTask(task);
-                    }}
-                    className="px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                  >
-                    <EditIcon className="w-3.5 h-3.5" />
-                    <span>Edit Task</span>
-                  </button>
-                )}
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors"
-            >
-              Close
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

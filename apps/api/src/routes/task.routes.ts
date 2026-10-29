@@ -17,9 +17,11 @@ router.use(requireAuth);
 
 router.post('/', createTask);
 router.get('/', getProjectTasks);
+router.get('/my', getMyTasks);
 router.get('/my-tasks', getMyTasks);
 router.patch('/:id', updateTask);
 router.patch('/:id/move', moveTask);
+router.put('/:id/move', moveTask);
 router.post('/:id/comments', addTaskComment);
 router.delete('/:id', deleteTask);
 

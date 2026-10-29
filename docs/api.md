@@ -118,19 +118,19 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
   ```
 
 #### `GET /api/v1/tasks?projectId=`
-- **Description**: List all tasks for a project.
+- **Description**: List tasks for a project. Returns all public project tasks for all members; private tasks (`isPrivate: true`) are visible only to the task creator, assignees, and project Admins/Moderators.
 
 #### `GET /api/v1/tasks/my`
-- **Description**: List user's assigned/created tasks across all their projects.
+- **Description**: List user's assigned/created tasks across all their projects plus personal private tasks.
 
 #### `PATCH /api/v1/tasks/:id`
-- **Description**: Update task title, status, priority, due date, subtasks, or assignees.
+- **Description**: Update task status, description, subtasks, or assignees. Full planning field edits (`title`, `priority`, `dueDate`, `isPrivate`) require task creator or project Admin/Moderator. Regular members can update `status`, `subtasks`, `description`, and self-assign or unassign themselves.
 
 #### `PUT /api/v1/tasks/:id/move`
-- **Description**: Update task status and order index for Kanban drag-and-drop.
+- **Description**: Update task status and order index for Kanban drag-and-drop. Accessible to project members, assignees, creators, and admins.
 
 #### `POST /api/v1/tasks/:id/comments`
-- **Description**: Add a comment to a task (requires assigned member, task creator, or project admin).
+- **Description**: Add a comment to a task. Accessible to all project members, assignees, task creators, and project admins.
 
 #### `DELETE /api/v1/tasks/:id`
-- **Description**: Soft delete a task (requires task creator or project admin/moderator).
+- **Description**: Soft delete a task (strictly requires task creator or project Admin/Moderator).

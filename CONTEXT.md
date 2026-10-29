@@ -61,12 +61,12 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
 | `POST` | `/api/v1/tasks` | Create task (in project or personal private task) | Project Member |
-| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (Kanban / List) | Project Member |
-| `GET` | `/api/v1/tasks/my` | Get user's assigned/created tasks across all joined projects | Authenticated |
-| `PATCH` | `/api/v1/tasks/:id` | Update task (status, assignees, subtasks, priority, due date) | Project Member / Assignee |
-| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Task Assignee / Admin |
-| `POST` | `/api/v1/tasks/:id/comments` | Add comment to a task | Task Assignee / Admin |
-| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator or Project Admin |
+| `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (All public project tasks visible; private tasks scoped to creator/assignee/admin) | Project Member |
+| `GET` | `/api/v1/tasks/my` | Get user's assigned/created tasks across all joined projects plus personal tasks | Authenticated |
+| `PATCH` | `/api/v1/tasks/:id` | Update task: status, subtasks, description, self-assign (Member); full planning metadata (Creator / Admin / Mod) | Project Member / Assignee / Admin |
+| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Project Member / Assignee / Admin |
+| `POST` | `/api/v1/tasks/:id/comments` | Add comment to a task | Project Member / Assignee / Admin |
+| `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator or Project Admin / Moderator |
 
 ### 3.3 Messages & Real-Time (`/api/v1/messages`)
 

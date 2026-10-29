@@ -1,7 +1,7 @@
 'use client';
 
 import { CheckCircle2, FolderGit2, Zap, ArrowUpRight, Plus } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { TaskCard } from '@/components/shared/TaskCard';
@@ -12,30 +12,35 @@ import { fetchMyTasks } from '@/lib/api/task.api';
 import { Task } from '@synca/types';
 
 export default function DashboardPage() {
-  const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { user, isLoaded: isUserLoaded } = useUser();
+  const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { projects } = useProjects();
-  const [activeTab, setActiveTab] = useState<'Upcoming' | 'Overdue' | 'Completed'>('Upcoming');
+  const [activeTab, setActiveTab] = useState<'All' | 'Upcoming' | 'Overdue' | 'Completed'>('All');
   const [greeting, setGreeting] = useState('Good Evening');
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadTasks() {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const fetched = await fetchMyTasks(token);
-        if (isMounted) {
-          setLiveTasks(fetched);
-        }
-      } catch (err) {
-        console.warn('[DashboardPage] Could not load live tasks:', err);
+  // Authenticated task fetcher with automatic retry
+  const loadTasks = useCallback(async () => {
+    if (!isSignedIn) return;
+    try {
+      let token = await getToken();
+      if (!token) {
+        token = await getToken({ skipCache: true });
       }
+      if (!token) return;
+      const fetched = await fetchMyTasks(token);
+      setLiveTasks(fetched);
+    } catch (err) {
+      console.warn('[DashboardPage] Could not load live tasks:', err);
     }
-    loadTasks();
+  }, [getToken, isSignedIn]);
+
+  useEffect(() => {
+    if (isAuthLoaded && isSignedIn) {
+      loadTasks();
+    }
 
     const handleSync = () => {
       loadTasks();
@@ -45,11 +50,10 @@ export default function DashboardPage() {
     window.addEventListener('synca:tasks-changed', handleSync);
 
     return () => {
-      isMounted = false;
       window.removeEventListener('synca:projects-changed', handleSync);
       window.removeEventListener('synca:tasks-changed', handleSync);
     };
-  }, [getToken]);
+  }, [isAuthLoaded, isSignedIn, loadTasks]);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -63,7 +67,7 @@ export default function DashboardPage() {
   }, []);
 
   const getDisplayName = () => {
-    if (!isLoaded) return '...';
+    if (!isUserLoaded) return '...';
     let name = '';
     if (user?.firstName) {
       name = user.firstName;
@@ -79,8 +83,9 @@ export default function DashboardPage() {
 
   const userName = getDisplayName();
 
-  // Exclude tasks that belong to projects that are no longer active
+  // Exclude tasks that belong to deleted/unjoined projects, but never drop tasks if projects are still loading
   const validTasks = useMemo(() => {
+    if (projects.length === 0) return liveTasks;
     return liveTasks.filter((t) => {
       if (!t.projectId) return true; // Personal task
       return projects.some((p) => String(p._id) === String(t.projectId));
@@ -92,6 +97,34 @@ export default function DashboardPage() {
     const found = projects.find((p) => String(p._id) === String(projectId));
     return found?.name || 'Active Project';
   };
+
+  const displayedAll = useMemo(() => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    return validTasks
+      .filter((t) => t.status !== 'Done')
+      .map((t) => {
+        const isOverdue = t.dueDate && new Date(t.dueDate) < todayStart;
+        return {
+          id: t._id,
+          title: t.title,
+          project: getProjectName(t.projectId),
+          dueDate: t.dueDate
+            ? new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            : 'Flexible',
+          status: isOverdue ? 'Overdue' : 'Upcoming',
+          tag: t.priority,
+          bgVariant: (isOverdue
+            ? 'peach'
+            : t.priority === 'High'
+            ? 'peach'
+            : t.priority === 'Medium'
+            ? 'yellow'
+            : 'white') as any,
+        };
+      });
+  }, [validTasks, projects]);
 
   const displayedUpcoming = useMemo(() => {
     const todayStart = new Date();
@@ -150,11 +183,13 @@ export default function DashboardPage() {
   const activeProjectsCount = projects.length;
 
   const currentTasks =
-    activeTab === 'Upcoming'
+    activeTab === 'All'
+      ? displayedAll
+      : activeTab === 'Upcoming'
       ? displayedUpcoming
       : activeTab === 'Overdue'
-        ? displayedOverdue
-        : displayedCompleted;
+      ? displayedOverdue
+      : displayedCompleted;
 
   const weeklyCompletedCount = useMemo(() => {
     const oneWeekAgo = new Date();
@@ -250,16 +285,33 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-normal text-zinc-900 dark:text-zinc-100">Task Status</h2>
             <div className="flex items-center bg-zinc-100 dark:bg-black/40 border border-transparent dark:border-white/[0.06] p-1 rounded-full text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              {(['Upcoming', 'Overdue', 'Completed'] as const).map((tab) => (
+              {(
+                [
+                  { key: 'All', label: 'All', count: displayedAll.length },
+                  { key: 'Upcoming', label: 'Upcoming', count: displayedUpcoming.length },
+                  { key: 'Overdue', label: 'Overdue', count: displayedOverdue.length },
+                  { key: 'Completed', label: 'Completed', count: displayedCompleted.length },
+                ] as const
+              ).map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1 rounded-full transition-all ${activeTab === tab
-                    ? 'bg-[#8be6c1] text-zinc-900 font-semibold shadow-sm'
-                    : 'hover:text-zinc-900 dark:hover:text-zinc-100'
-                    }`}
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-2.5 sm:px-3 py-1 rounded-full transition-all flex items-center gap-1.5 ${
+                    activeTab === tab.key
+                      ? 'bg-[#8be6c1] text-zinc-950 font-bold shadow-sm'
+                      : 'hover:text-zinc-900 dark:hover:text-zinc-100'
+                  }`}
                 >
-                  {tab}
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold transition-colors ${
+                      activeTab === tab.key
+                        ? 'bg-zinc-950/15 text-zinc-950'
+                        : 'bg-zinc-200/80 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
                 </button>
               ))}
             </div>

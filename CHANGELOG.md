@@ -5,6 +5,42 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Collaborative Task Visibility & Permission Refinement] - 2026-10-29
+
+### Enhanced
+- **Collaborative Project Board Visibility ([`task.controller.ts`](file:///d:/Synca-FYP/apps/api/src/controllers/task.controller.ts))**:
+  - Replaced the restrictive task filter in `getProjectTasks` so that all non-private project tasks are visible across the entire project team (resolving the "Ghost" Kanban board issue).
+  - Maintained privacy for `isPrivate: true` tasks, which remain restricted to task creators, assignees, and project admins.
+- **Agile Task Collaboration & Self-Assignment**:
+  - **Self-Assignment**: Regular project members can now assign or unassign themselves from project tasks without requiring admin elevation.
+  - **Task Description & Subtasks**: Assigned and project members can now update task descriptions and check off subtask checklist items to document work progress.
+  - **Kanban Card Movement (`moveTask`)**: Any project member can now reorder and move tasks between Kanban columns.
+  - **Task Comments Stream (`addTaskComment`)**: Enabled all project members to post comments and collaborate on project tasks.
+- **Documentation Alignment**:
+  - Updated [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md) with comprehensive task visibility and action permission matrices.
+  - Updated [`docs/api.md`](file:///d:/Synca-FYP/docs/api.md) and [`CONTEXT.md`](file:///d:/Synca-FYP/CONTEXT.md) to reflect the refined collaborative RBAC architecture.
+
+## [Phase 3 Improvements & Fixes] - 2026-09-27
+
+### Added & Enhanced
+- **Asana-Style Task Slide-Over Drawer ([`<TaskDetailModal />`](file:///d:/Synca-FYP/apps/web/src/components/task/TaskDetailModal.tsx))**:
+  - Converted the task detail view into a full-height slide-over side drawer emerging smoothly from the right side of the screen (`animate-in slide-in-from-right duration-300`).
+  - Added Asana-style quick action header with a 1-click **"Mark Complete" / "Completed"** toggle button.
+  - Organized task attributes into an Asana-style structured properties table (Assignees with avatar chips, Due Date, Project, Status badges, and Priority pills).
+  - Integrated full subtask checklist toggling, scrollable comments stream, and real-time comment authoring bar.
+- **Instant Project Synchronization & In-Memory SWR Cache ([`useProjects.ts`](file:///d:/Synca-FYP/apps/web/src/hooks/useProjects.ts))**:
+  - Implemented a shared in-memory project cache with instant initialization, eliminating cold-start flickering and navigation lag across Dashboard, Projects, and Sidebar.
+  - Applied optimistic updates across `createProject`, `joinProject`, `updateProject`, and `deleteProject` for zero-latency UI sync.
+- **Dashboard Task Synchronization & Tab Counter Badges ([`dashboard/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/dashboard/page.tsx))**:
+  - Synchronized task fetching with Clerk authentication readiness (`isAuthLoaded` & `isSignedIn`) and token refresh fallback to ensure tasks across all user projects populate on initial load.
+  - Added an **"All"** tasks tab alongside real-time task counter badges for `All`, `Upcoming`, `Overdue`, and `Completed`.
+  - Prevented premature task omission when projects are loading asynchronously.
+
+### Fixed
+- **API Task Route Alignment ([`apps/api/src/routes/task.routes.ts`](file:///d:/Synca-FYP/apps/api/src/routes/task.routes.ts))**:
+  - Registered `router.get('/my', getMyTasks)` alongside `/my-tasks` so the canonical endpoint `GET /api/v1/tasks/my` called by the frontend no longer returns `404 Not Found`.
+  - Added `PUT /:id/move` alongside `PATCH /:id/move` for complete API client compatibility.
+
 ## [Architecture Simplification - Project-Centric Model] - 2026-09-22
 
 ### Changed & Refactored

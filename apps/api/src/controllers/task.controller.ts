@@ -174,9 +174,13 @@ export async function getProjectTasks(req: Request, res: Response) {
       deletedAt: null,
     };
 
-    // If user is not Admin or Moderator, restrict to tasks assigned to them or created by them
+    // For regular members, show all public tasks; hide private tasks unless the user is the creator or an assignee
     if (!isAdminOrMod) {
-      query.$or = [{ assignees: userId }, { createdBy: userId }];
+      query.$or = [
+        { isPrivate: { $ne: true } },
+        { createdBy: userId },
+        { assignees: userId },
+      ];
     }
 
     if (status && typeof status === 'string') {
@@ -307,312 +311,356 @@ export async function updateTask(req: Request, res: Response) {
     // Permission check
     const isCreator = task.createdBy === userId;
     let isAdminOrMod = false;
+    let isProjectMember = false;
     const isAssignee = task.assignees?.includes(userId);
 
     if (task.projectId) {
       const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
       if (project) {
         isAdminOrMod = isProjectAdminOrMod(project, userId);
+        isProjectMember =
+          project.ownerId === userId ||
+          Boolean(project.members?.some((m) => m.userId === userId)) ||
+          Boolean(project.teamMembers?.includes(userId));
       }
     }
 
     const canEditFull = isCreator || isAdminOrMod;
-    const canUpdateStatusOrChecklist = canEditFull || isAssignee;
+    const canCollaborate = canEditFull || isAssignee || isProjectMember;
 
-    if (!canUpdateStatusOrChecklist) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'You do not have permission to modify this task' },
-      });
-    }
-
-    const updates = parseResult.data;
-
-    // Non-creator non-admins can ONLY change status or subtasks checklist
-    if (!canEditFull) {
-      if (
-        updates.title ||
-        (updates.description !== undefined && updates.description !== task.description) ||
-        updates.priority ||
-        updates.assignees ||
-        updates.dueDate !== undefined ||
-        updates.isPrivate !== undefined
-      ) {
+      if (!canCollaborate) {
         return res.status(403).json({
           success: false,
-          error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can edit task details' },
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to modify this task' },
         });
       }
+
+      const updates = parseResult.data;
+
+      // Non-creator non-admins cannot change core planning fields
+      if (!canEditFull) {
+        if (
+          updates.title ||
+          updates.priority ||
+          updates.dueDate !== undefined ||
+          updates.isPrivate !== undefined
+        ) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can edit title, priority, or due dates' },
+          });
+        }
+
+        // If assignees are modified by a regular member, they can only add or remove themselves
+        if (updates.assignees) {
+          const currentAssignees = new Set(task.assignees || []);
+          const newAssignees = new Set(updates.assignees);
+
+          let onlySelfModified = true;
+          for (const uid of currentAssignees) {
+            if (!newAssignees.has(uid) && uid !== userId) {
+              onlySelfModified = false;
+              break;
+            }
+          }
+          for (const uid of newAssignees) {
+            if (!currentAssignees.has(uid) && uid !== userId) {
+              onlySelfModified = false;
+              break;
+            }
+          }
+
+          if (!onlySelfModified) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN', message: 'Regular members can only assign or unassign themselves' },
+            });
+          }
+        }
+      }
+
+      if (updates.title && canEditFull) task.title = updates.title.trim();
+      if (updates.description !== undefined) task.description = updates.description.trim();
+      if (updates.status) task.status = updates.status;
+      if (updates.priority && canEditFull) task.priority = updates.priority;
+      if (updates.assignees) task.assignees = updates.assignees;
+      if (updates.dueDate !== undefined && canEditFull) task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+      if (updates.subtasks) task.subtasks = updates.subtasks as any;
+      if (updates.isPrivate !== undefined && canEditFull) task.isPrivate = updates.isPrivate;
+
+      await task.save();
+
+      return res.status(200).json({
+        success: true,
+        data: task,
+      });
+    } catch (error: any) {
+      console.error('[TaskController] updateTask error:', error);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to update task' },
+      });
     }
-
-    if (updates.title && canEditFull) task.title = updates.title.trim();
-    if (updates.description !== undefined && canEditFull) task.description = updates.description.trim();
-    if (updates.status) task.status = updates.status;
-    if (updates.priority && canEditFull) task.priority = updates.priority;
-    if (updates.assignees && canEditFull) task.assignees = updates.assignees;
-    if (updates.dueDate !== undefined && canEditFull) task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
-    if (updates.subtasks) task.subtasks = updates.subtasks as any;
-    if (updates.isPrivate !== undefined && canEditFull) task.isPrivate = updates.isPrivate;
-
-    await task.save();
-
-    return res.status(200).json({
-      success: true,
-      data: task,
-    });
-  } catch (error: any) {
-    console.error('[TaskController] updateTask error:', error);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to update task' },
-    });
   }
-}
 
 /**
  * PUT /api/v1/tasks/:id/move
  * Move a task to a new Kanban column or reorder position.
  */
 export async function moveTask(req: Request, res: Response) {
-  try {
-    const userId = getUserId(req);
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'UNAUTHORIZED', message: 'User session required' },
-      });
-    }
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'User session required' },
+        });
+      }
 
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
-      });
-    }
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
+        });
+      }
 
-    const parseResult = moveTaskSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid move payload',
-          details: parseResult.error.errors.map((e) => ({
-            field: e.path.join('.'),
-            message: e.message,
-          })),
-        },
-      });
-    }
+      const parseResult = moveTaskSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid move payload',
+            details: parseResult.error.errors.map((e) => ({
+              field: e.path.join('.'),
+              message: e.message,
+            })),
+          },
+        });
+      }
 
-    const task = await Task.findOne({ _id: id, deletedAt: null });
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Task not found' },
-      });
-    }
+      const task = await Task.findOne({ _id: id, deletedAt: null });
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Task not found' },
+        });
+      }
 
-    const isCreator = task.createdBy === userId;
-    const isAssignee = task.assignees?.includes(userId);
-    let isAdminOrMod = false;
+      const isCreator = task.createdBy === userId;
+      const isAssignee = task.assignees?.includes(userId);
+      let isAdminOrMod = false;
+      let isProjectMember = false;
 
-    if (task.projectId) {
-      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-      if (project) {
-        isAdminOrMod = isProjectAdminOrMod(project, userId);
+      if (task.projectId) {
+        const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+        if (project) {
+          isAdminOrMod = isProjectAdminOrMod(project, userId);
+          isProjectMember =
+            project.ownerId === userId ||
+            Boolean(project.members?.some((m) => m.userId === userId)) ||
+            Boolean(project.teamMembers?.includes(userId));
+        }
+      }
+
+        const canMove = isCreator || isAssignee || isAdminOrMod || isProjectMember;
+
+        if (!canMove) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'You must be a member of this project or task to move it' },
+          });
+        }
+
+        const { newStatus, newOrder } = parseResult.data;
+
+        task.status = newStatus;
+        task.order = newOrder;
+        await task.save();
+
+        return res.status(200).json({
+          success: true,
+          data: task,
+        });
+      } catch (error: any) {
+        console.error('[TaskController] moveTask error:', error);
+        return res.status(500).json({
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to move task' },
+        });
       }
     }
-
-    if (!isCreator && !isAssignee && !isAdminOrMod) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'You must be assigned to or an admin of this task to reorder it' },
-      });
-    }
-
-    const { newStatus, newOrder } = parseResult.data;
-
-    task.status = newStatus;
-    task.order = newOrder;
-    await task.save();
-
-    return res.status(200).json({
-      success: true,
-      data: task,
-    });
-  } catch (error: any) {
-    console.error('[TaskController] moveTask error:', error);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to move task' },
-    });
-  }
-}
 
 /**
  * DELETE /api/v1/tasks/:id
  * Soft delete a task. Only Task Creator or Project Admin/Moderator can delete.
  */
 export async function deleteTask(req: Request, res: Response) {
-  try {
-    const userId = getUserId(req);
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'UNAUTHORIZED', message: 'User session required' },
-      });
-    }
+      try {
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({
+            success: false,
+            error: { code: 'UNAUTHORIZED', message: 'User session required' },
+          });
+        }
 
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
-      });
-    }
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
+          });
+        }
 
-    const task = await Task.findOne({ _id: id, deletedAt: null });
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Task not found' },
-      });
-    }
+        const task = await Task.findOne({ _id: id, deletedAt: null });
+        if (!task) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Task not found' },
+          });
+        }
 
-    const isCreator = task.createdBy === userId;
-    let isAdminOrMod = false;
+        const isCreator = task.createdBy === userId;
+        let isAdminOrMod = false;
 
-    if (task.projectId) {
-      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-      if (project) {
-        isAdminOrMod = isProjectAdminOrMod(project, userId);
+        if (task.projectId) {
+          const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+          if (project) {
+            isAdminOrMod = isProjectAdminOrMod(project, userId);
+          }
+        }
+
+        if (!isCreator && !isAdminOrMod) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can delete tasks' },
+          });
+        }
+
+        task.deletedAt = new Date();
+        await task.save();
+
+        return res.status(200).json({
+          success: true,
+          data: { id: task._id, message: 'Task deleted successfully' },
+        });
+      } catch (error: any) {
+        console.error('[TaskController] deleteTask error:', error);
+        return res.status(500).json({
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to delete task' },
+        });
       }
     }
 
-    if (!isCreator && !isAdminOrMod) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can delete tasks' },
-      });
-    }
+    /**
+     * POST /api/v1/tasks/:id/comments
+     * Add a comment to a task.
+     */
+    export async function addTaskComment(req: Request, res: Response) {
+      try {
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({
+            success: false,
+            error: { code: 'UNAUTHORIZED', message: 'User session required' },
+          });
+        }
 
-    task.deletedAt = new Date();
-    await task.save();
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
+          });
+        }
 
-    return res.status(200).json({
-      success: true,
-      data: { id: task._id, message: 'Task deleted successfully' },
-    });
-  } catch (error: any) {
-    console.error('[TaskController] deleteTask error:', error);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to delete task' },
-    });
-  }
-}
+        const parseResult = addCommentSchema.safeParse(req.body);
+        if (!parseResult.success) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Invalid comment payload',
+              details: parseResult.error.errors.map((e) => ({
+                field: e.path.join('.'),
+                message: e.message,
+              })),
+            },
+          });
+        }
 
-/**
- * POST /api/v1/tasks/:id/comments
- * Add a comment to a task.
- */
-export async function addTaskComment(req: Request, res: Response) {
-  try {
-    const userId = getUserId(req);
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'UNAUTHORIZED', message: 'User session required' },
-      });
-    }
+        const task = await Task.findOne({ _id: id, deletedAt: null });
+        if (!task) {
+          return res.status(404).json({
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Task not found' },
+          });
+        }
 
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Valid task ID required' },
-      });
-    }
+        const isCreator = task.createdBy === userId;
+        const isAssignee = task.assignees?.includes(userId);
+        let isAdminOrMod = false;
+        let isProjectMember = false;
 
-    const parseResult = addCommentSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid comment payload',
-          details: parseResult.error.errors.map((e) => ({
-            field: e.path.join('.'),
-            message: e.message,
-          })),
-        },
-      });
-    }
+        if (task.projectId) {
+          const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+          if (project) {
+            isAdminOrMod = isProjectAdminOrMod(project, userId);
+            isProjectMember =
+              project.ownerId === userId ||
+              Boolean(project.members?.some((m) => m.userId === userId)) ||
+              Boolean(project.teamMembers?.includes(userId));
+          }
+        }
 
-    const task = await Task.findOne({ _id: id, deletedAt: null });
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Task not found' },
-      });
-    }
+          const canComment = isCreator || isAssignee || isAdminOrMod || isProjectMember;
 
-    const isCreator = task.createdBy === userId;
-    const isAssignee = task.assignees?.includes(userId);
-    let isAdminOrMod = false;
+          if (!canComment) {
+            return res.status(403).json({
+              success: false,
+              error: { code: 'FORBIDDEN', message: 'You must be a member of this project or task to comment' },
+            });
+          }
 
-    if (task.projectId) {
-      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-      if (project) {
-        isAdminOrMod = isProjectAdminOrMod(project, userId);
+          let userName = 'User';
+          let userAvatar = '';
+          try {
+            const user = await clerkClient.users.getUser(userId);
+            if (user) {
+              userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username || user.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'User';
+              userAvatar = user.imageUrl || '';
+            }
+          } catch (e) {
+            console.warn('[TaskController] Could not fetch Clerk user for comment:', e);
+          }
+
+          const newComment = {
+            userId,
+            userName,
+            userAvatar,
+            text: parseResult.data.text.trim(),
+            createdAt: new Date(),
+          };
+
+          if (!task.comments) {
+            task.comments = [];
+          }
+
+          task.comments.push(newComment as any);
+          await task.save();
+
+          return res.status(201).json({
+            success: true,
+            data: task,
+          });
+        } catch (error: any) {
+          console.error('[TaskController] addTaskComment error:', error);
+          return res.status(500).json({
+            success: false,
+            error: { code: 'INTERNAL_ERROR', message: 'Failed to add comment' },
+          });
+        }
       }
-    }
-
-    if (!isCreator && !isAssignee && !isAdminOrMod) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'You must be assigned to or an admin of this task to comment' },
-      });
-    }
-
-    let userName = 'User';
-    let userAvatar = '';
-    try {
-      const user = await clerkClient.users.getUser(userId);
-      if (user) {
-        userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username || user.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'User';
-        userAvatar = user.imageUrl || '';
-      }
-    } catch (e) {
-      console.warn('[TaskController] Could not fetch Clerk user for comment:', e);
-    }
-
-    const newComment = {
-      userId,
-      userName,
-      userAvatar,
-      text: parseResult.data.text.trim(),
-      createdAt: new Date(),
-    };
-
-    if (!task.comments) {
-      task.comments = [];
-    }
-
-    task.comments.push(newComment as any);
-    await task.save();
-
-    return res.status(201).json({
-      success: true,
-      data: task,
-    });
-  } catch (error: any) {
-    console.error('[TaskController] addTaskComment error:', error);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to add comment' },
-    });
-  }
-}
