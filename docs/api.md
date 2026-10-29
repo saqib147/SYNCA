@@ -134,3 +134,74 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 
 #### `DELETE /api/v1/tasks/:id`
 - **Description**: Soft delete a task (strictly requires task creator or project Admin/Moderator).
+
+---
+
+### 2.3 Messages (`/api/v1/messages`) — Phase 4
+
+Cursor-paginated history over REST; live delivery via Socket.io (see §3).
+
+#### `GET /api/v1/messages/dm/:userId`
+- **Description**: Get 1:1 DM history with another user. `channelId` is the sorted pair `min(userId, peerId):max(userId, peerId)`.
+- **Query**: `?cursor=<messageId>&limit=50`
+- **Auth**: Authenticated (caller must be a participant).
+
+#### `GET /api/v1/messages/channel/:projectId`
+- **Description**: Get the project's default `#general` channel history (`channelType: 'channel'`, `channelId = projectId`).
+- **Query**: `?cursor=<messageId>&limit=50`
+- **Auth**: Project Member.
+
+#### `POST /api/v1/messages`
+- **Description**: REST fallback to send a message (primary path is Socket `message:send`).
+- **Request Body**:
+  ```json
+  {
+    "channelType": "channel",
+    "channelId": "64f1a2b3...",
+    "content": { "type": "doc", "content": [] },
+    "attachments": []
+  }
+  ```
+- **Auth**: Project Member (channel) or DM participant (dm).
+
+#### `DELETE /api/v1/messages/:id`
+- **Description**: Soft delete a message. Sender always; for project channels, Admin/Moderator may delete others' messages. DM delete is sender-only.
+- **Response `200`**: `{ messageId, channelId }`.
+
+### 2.4 Files (`/api/v1/files`)
+
+#### `POST /api/v1/files/upload`
+- Upload to Cloudinary and create a `FileRef`. Authenticated.
+
+#### `GET /api/v1/files/:id`
+- Metadata + signed URL. Requires project membership when `projectId` is set.
+
+#### `DELETE /api/v1/files/:id`
+- Delete FileRef + Cloudinary asset. Uploader or project Admin.
+
+---
+
+## 3. WebSocket Event Protocols (Socket.io)
+
+### Client → Server
+| Event | Payload | Notes |
+|---|---|---|
+| `project:join` | `{ projectId }` | Join `project:{id}` after membership check |
+| `project:leave` | `{ projectId }` | Leave socket room |
+| `message:send` | `{ channelType, channelId, content, attachments? }` | Persist + broadcast `message:new` |
+| `message:react` | `{ messageId, emoji }` | Toggle reaction |
+| `message:delete` | `{ messageId }` | Soft delete + broadcast |
+| `typing:start` / `typing:stop` | `{ channelType, channelId }` | Ephemeral via Redis |
+| `task:move` | `{ taskId, newStatus, newIndex }` | Optional live Kanban sync |
+
+### Server → Client
+| Event | Payload |
+|---|---|
+| `message:new` | `Message` |
+| `message:deleted` | `{ messageId, channelId }` |
+| `message:reaction` | `{ messageId, reactions }` |
+| `typing:update` | `{ channelId, typingUsers }` |
+| `presence:update` | `{ userId, status, lastSeen }` |
+| `task:updated` | `{ task, projectId }` |
+| `notification:new` | `Notification` (Phase 5) |
+| `error` | `{ code, message }` |

@@ -1,5 +1,7 @@
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
+import { SocketProvider } from '@/context/SocketContext';
+import { ChatNotificationProvider } from '@/context/ChatNotificationContext';
 
 export default function AppLayout({
   children,
@@ -7,17 +9,21 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#f4f4f5] dark:bg-transparent p-4 gap-6 transition-colors duration-150">
-      {/* Dark Sidebar */}
-      <Sidebar />
+    <SocketProvider>
+      <ChatNotificationProvider>
+        <div className="flex min-h-screen bg-[#f4f4f5] dark:bg-transparent p-4 gap-6 transition-colors duration-150">
+          {/* Dark Sidebar */}
+          <Sidebar />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* <TopBar /> */}
-        <main className="flex-1 p-6 overflow-y-auto">
-          {children}
-        </main>
-      </div>
-    </div>
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* <TopBar /> */}
+            <main className="flex-1 p-6 overflow-y-auto">
+              {children}
+            </main>
+          </div>
+        </div>
+      </ChatNotificationProvider>
+    </SocketProvider>
   );
 }

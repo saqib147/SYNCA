@@ -9,6 +9,8 @@ import { redisClient } from './lib/redis.js';
 import fileRouter from './routes/file.routes.js';
 import projectRouter from './routes/project.routes.js';
 import taskRouter from './routes/task.routes.js';
+import messageRouter from './routes/message.routes.js';
+import userRouter from './routes/user.routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -27,6 +29,8 @@ export const createApp = () => {
   app.use('/api/v1/files', fileRouter);
   app.use('/api/v1/projects', projectRouter);
   app.use('/api/v1/tasks', taskRouter);
+  app.use('/api/v1/messages', messageRouter);
+  app.use('/api/v1/users', userRouter);
 
   app.get('/health', async (_req, res) => {
     const dbState = mongoose.connection.readyState;

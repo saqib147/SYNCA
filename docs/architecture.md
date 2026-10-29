@@ -63,7 +63,7 @@
 
 ### ADR-003: MongoDB Atlas for Data Store
 - **Decision**: MongoDB Atlas as primary data store via Mongoose.
-- **Rationale**: Workspace entities (tasks, milestones, rich text content, custom roles) feature flexible nested schemas that map cleanly to BSON documents. Mongoose schemas combined with Zod validation ensure strict application-level validation.
+- **Rationale**: Project entities (tasks, milestones, rich text content, nested members) feature flexible nested schemas that map cleanly to BSON documents. Mongoose schemas combined with Zod validation ensure strict application-level validation.
 
 ### ADR-004: Upstash Redis for Caching and Multi-Instance WebSockets
 - **Decision**: Upstash Redis for caching, rate limiting, and Socket.io multi-instance scaling via `@socket.io/redis-adapter`.
@@ -134,3 +134,22 @@ export const update = async (taskId: string, data: UpdateTaskInput) => {
 | **Global UI State** | Zustand | Active modal state, sidebar collapsed toggle |
 | **Local Component State** | React `useState` | Hover state, dropdown open, inline inputs |
 | **URL State** | Next.js `useSearchParams` | Active filters, Kanban column view tab |
+
+---
+
+## 5. Project-Centric Domain Model
+
+```
+User (Clerk)
+ └── ProjectMembership (Admin | Moderator | Member)
+      └── Project
+           ├── Tasks (+ personal tasks with projectId: null)
+           ├── Milestones / Goals
+           ├── Channel (#general, channelId = projectId)
+           └── FileRefs
+
+DM (channelType: 'dm', channelId = sorted userId pair)
+ └── Messages between two users (no project required)
+```
+
+**Deprecated**: Workspace / Room collections and `RoomWide` privacy. Active contracts live in `CONTEXT.md` and `/docs/`.

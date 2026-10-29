@@ -1,13 +1,14 @@
-export type Role = 'Owner' | 'Admin' | 'Manager' | 'Member' | 'Viewer' | 'Guest';
+/** Project-scoped roles (active RBAC). Legacy Room roles are removed. */
+export type ProjectRole = 'Admin' | 'Moderator' | 'Member';
+
+/** @deprecated Use ProjectRole. Kept briefly for any leftover imports. */
+export type Role = ProjectRole;
 
 export type Permission =
-  | 'room:manage_settings'
-  | 'room:manage_members'
-  | 'project:create'
-  | 'project:view'
+  | 'project:manage_settings'
+  | 'project:manage_members'
   | 'project:edit'
   | 'project:delete'
-  | 'project:manage_members'
   | 'task:create'
   | 'task:edit'
   | 'task:delete'
@@ -15,16 +16,14 @@ export type Permission =
   | 'milestone:manage'
   | 'chat:send'
   | 'chat:read'
+  | 'chat:moderate'
   | 'file:upload';
 
 export const ALL_PERMISSIONS: Permission[] = [
-  'room:manage_settings',
-  'room:manage_members',
-  'project:create',
-  'project:view',
+  'project:manage_settings',
+  'project:manage_members',
   'project:edit',
   'project:delete',
-  'project:manage_members',
   'task:create',
   'task:edit',
   'task:delete',
@@ -32,16 +31,14 @@ export const ALL_PERMISSIONS: Permission[] = [
   'milestone:manage',
   'chat:send',
   'chat:read',
+  'chat:moderate',
   'file:upload',
 ];
 
-export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  Owner: [...ALL_PERMISSIONS],
+export const PROJECT_ROLE_PERMISSIONS: Record<ProjectRole, Permission[]> = {
   Admin: [...ALL_PERMISSIONS],
-  Manager: [
-    'project:view',
+  Moderator: [
     'project:edit',
-    'project:manage_members',
     'task:create',
     'task:edit',
     'task:delete',
@@ -49,27 +46,33 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'milestone:manage',
     'chat:send',
     'chat:read',
+    'chat:moderate',
     'file:upload',
   ],
   Member: [
-    'project:create',
-    'project:view',
     'task:create',
     'task:edit',
     'chat:send',
     'chat:read',
     'file:upload',
   ],
-  Viewer: ['project:view', 'chat:read'],
-  Guest: ['project:view', 'chat:read'],
 };
 
-export function hasPermission(
-  role: Role,
-  customPermissions: Permission[] = [],
-  requiredPermission: Permission
-): boolean {
-  const rolePerms = ROLE_PERMISSIONS[role] ?? [];
-  const effective = new Set([...rolePerms, ...customPermissions]);
-  return effective.has(requiredPermission);
+/** @deprecated Prefer PROJECT_ROLE_PERMISSIONS */
+export const ROLE_PERMISSIONS = PROJECT_ROLE_PERMISSIONS;
+
+export function hasPermission(role: ProjectRole, requiredPermission: Permission): boolean {
+  const rolePerms = PROJECT_ROLE_PERMISSIONS[role] ?? [];
+  return rolePerms.includes(requiredPermission);
+}
+
+/** Stable DM channel id: sorted Clerk userId pair joined by `:`. */
+export function dmChannelId(userIdA: string, userIdB: string): string {
+  return [userIdA, userIdB].sort().join(':');
+}
+
+export function parseDmChannelId(channelId: string): [string, string] | null {
+  const parts = channelId.split(':');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return [parts[0], parts[1]];
 }

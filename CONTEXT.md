@@ -12,12 +12,14 @@
 ### Key System Concepts
 - **Projects**: Top-level containers of work items, milestone deliverables, and channels. Each project has a unique 6-character alphanumeric `joinCode` for instant member onboarding.
 - **Project Roles**: Three-tier role hierarchy per project:
-  - **`Admin`**: Project owner/creator or promoted admin with full control over settings, member roles, join codes, and project archiving.
-  - **`Moderator`**: Manages project tasks, goals, milestones, and invites.
+  - **`Admin`**: Project owner/creator or promoted admin with full control over settings, member roles, join codes, and project deletion.
+  - **`Moderator`**: Manages project tasks, goals, milestones, invites, and channel message moderation.
   - **`Member`**: Collaborates on tasks, Kanban cards, subtasks, and project channels.
-- **Tasks**: Work items assigned within projects or personal private tasks (`isPrivate: true`).
-- **Messaging**: Real-time 1:1 Direct Messages (DMs) and project-scoped group channels (`#channel-name`) with rich-text (Tiptap), `@mentions`, emoji reactions, and file attachments.
+- **Tasks**: Work items assigned within projects or personal private tasks (`projectId: null`). Public project tasks are visible to all members; private project tasks are scoped to creator/assignees (+ Admin/Mod oversight).
+- **Messaging (Phase 4)**: Real-time 1:1 DMs and **one default `#general` channel per project** with rich-text (Tiptap), `@mentions`, emoji reactions, and file attachments. Multi-named channels are deferred.
 - **File Sharing**: Cloudinary-backed file attachments with file cards and signed private URLs.
+
+> **Deprecated**: Room / Workspace layers, `RoomWide` privacy, and legacy roles (`Owner`, `Manager`, `Viewer`, `Guest`). See `SYNCA_README.md` (legacy product brief) vs this file (active truth).
 
 ---
 
@@ -29,7 +31,7 @@
 | **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), ThemeContext (`light` / `dark` / `system` with zero-FOUC script), TanStack Query v5, Tiptap, Recharts |
 | **Backend** | Express.js + Socket.io | Standalone Node.js Express server on Render for persistent WebSockets |
 | **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for projects, tasks, channels, and milestones |
-| **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, and Socket.io multi-instance scaling |
+| **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, presence, unread, and Socket.io multi-instance scaling |
 | **Authentication** | Clerk Auth | Email/OAuth auth, JWT session management, `@clerk/nextjs` & `@clerk/express` SDKs |
 | **File Storage** | Cloudinary | Media transform, file cards, signed private URLs |
 | **Observability** | Pino + Sentry + BetterStack | Structured JSON logging with request tracing, Sentry error monitoring |
@@ -68,21 +70,21 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `POST` | `/api/v1/tasks/:id/comments` | Add comment to a task | Project Member / Assignee / Admin |
 | `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator or Project Admin / Moderator |
 
-### 3.3 Messages & Real-Time (`/api/v1/messages`)
+### 3.3 Messages & Real-Time (`/api/v1/messages`) — Phase 4
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `GET` | `/api/v1/messages/dm/:userId` | Get DM message history (cursor paginated) | Authenticated |
-| `GET` | `/api/v1/messages/channel/:projectId` | Get channel message history (cursor paginated) | Project Member |
-| `POST` | `/api/v1/messages` | Send message (REST fallback) | Project Member |
-| `DELETE` | `/api/v1/messages/:id` | Soft delete message | Sender / Project Admin |
+| `GET` | `/api/v1/messages/dm/:userId` | Get DM message history (cursor paginated) | DM Participant |
+| `GET` | `/api/v1/messages/channel/:projectId` | Get default project channel history (cursor paginated) | Project Member |
+| `POST` | `/api/v1/messages` | Send message (REST fallback; primary = Socket `message:send`) | Project Member / DM Participant |
+| `DELETE` | `/api/v1/messages/:id` | Soft delete message | Sender / Project Admin / Moderator (channel) |
 
 ### 3.4 File Storage (`/api/v1/files`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
 | `POST` | `/api/v1/files/upload` | Upload file to Cloudinary & create FileRef | Authenticated |
-| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Project Member |
+| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Project Member / Uploader |
 | `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | Uploader / Admin |
 
 ### 3.5 System & Webhooks
@@ -99,7 +101,9 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 ### Client → Server (`Emit`)
 - `project:join` `{ projectId }`
 - `project:leave` `{ projectId }`
-- `message:send` `{ channelType, channelId, content, attachments }`
+- `dm:join` `{ targetUserId }`
+- `dm:leave` `{ targetUserId }`
+- `message:send` `{ channelType, channelId, content, attachments, senderName?, senderAvatar? }`
 - `message:react` `{ messageId, emoji }`
 - `message:delete` `{ messageId }`
 - `typing:start` `{ channelType, channelId }`
@@ -124,9 +128,17 @@ This repository enforces strict execution and documentation rules defined in `.a
 1. **Context Awareness**: `CONTEXT.md` and `/docs/` must be consulted prior to edits.
 2. **Automated Post-Change Sync**: Every code edit, feature implementation, refactor, or route update MUST update:
    - `CONTEXT.md` (endpoint updates, schema adjustments, architecture notes)
-   - `/docs/` files (`api.md`, `database.md`, `architecture.md`, `realtime-security.md`)
+   - `/docs/` files (`api.md`, `database.md`, `architecture.md`, `realtime-security.md`, `roles-and-permissions.md`)
    - `CHANGELOG.md` (logged under current date/version)
 3. **Manual Sync Command**: Responds to `sync-docs` command by comparing git diff against docs and reconciling all discrepancies.
+
+### Direct Message Discovery (Scoped — No Global User Scan)
+
+DM discovery uses a **tiered scoped approach** to prevent exposing the full user database:
+
+- **Tier 1 — Teammate Search (default)**: The "New Message" modal (`NewMessageModal.tsx`) queries only the users who share at least one project with the current user, derived client-side from `useProjects()`. The user can filter by display name.
+- **Tier 2 — Contextual Quick-Actions**: "Message" buttons on task assignees, project member lists, and conversation member rosters open a DM directly.
+- **Tier 3 — Exact Email Lookup**: If the search query contains `@`, the modal switches to an email-lookup CTA that routes to `/chats?email=...` for server-side resolution (exact match only).
 
 ---
 
@@ -138,8 +150,24 @@ This repository enforces strict execution and documentation rules defined in `.a
 | **Phase 1** | Dashboard | Completed | 100% |
 | **Phase 2** | Architecture Simplification (Project-Centric Model) | Completed | 100% |
 | **Phase 3** | Projects & Tasks | Completed | 100% |
-| **Phase 4** | Real-Time Messaging | PENDING | 0% |
-| **Phase 5** | Roles, Permissions & Notifications | PENDING | 0% |
+| **Phase 4** | Real-Time Messaging | **Completed** | **100%** |
+| **Phase 5** | Notifications & Mentions *(roles already shipped in Phases 2–3; harden sole-Admin / ownership)* | PENDING | 0% |
 | **Phase 6** | People & Directory | PENDING | 0% |
 | **Phase 7** | Landing Page | PENDING | 0% |
 | **Phase 8** | Polish, Testing & Deployment | PENDING | 0% |
+
+### Phase 4 — Real-Time Messaging (Completed)
+
+**MVP**: One `#general` channel per project + 1:1 DMs from project roster. Defer multi-channels, threads, message edit, voice/video, full directory search.
+
+| Step | Description | Status |
+|---|---|---|
+| **4.1** | Align shared types & Zod: `Message` / `FileRef` drop `roomId`, add `projectId`; DM `channelId` = sorted user pair; project-centric permissions; privacy `Private \| Public` only | ✅ Completed |
+| **4.2** | API model cleanup: Project privacy enum; FileRef `projectId`; upload route uses `projectId` | ✅ Completed |
+| **4.3** | Message Mongoose model + indexes; helpers (`dmChannelId`, membership checks) | ✅ Completed |
+| **4.4** | REST: `GET` channel/DM history (cursor), `POST /messages`, `DELETE /messages/:id` | ✅ Completed |
+| **4.5** | Install Socket.io (+ redis-adapter); HTTP server bootstrap; Clerk socket auth middleware | ✅ Completed |
+| **4.6** | Socket handlers: `project:join/leave`, `message:send/react/delete`, typing, presence | ✅ Completed |
+| **4.7** | Web: `message.api.ts`, socket client hook, wire `/chats` to real DMs + unread | ✅ Completed |
+| **4.8** | Web: Project Conversation tab (`#general`) with live send / history | ✅ Completed |
+| **4.9** | Docs sync + CHANGELOG; mark Phase 4 complete when MVP verified | ✅ Completed |

@@ -28,7 +28,7 @@ export interface IProject extends Document {
   slug: string;
   description?: string;
   status: 'OnTrack' | 'ActiveSprint' | 'AtRisk' | 'Completed' | 'Archived';
-  privacy: 'Private' | 'RoomWide' | 'Public';
+  privacy: 'Private' | 'Public';
   goals: IProjectGoal[];
   milestones: IProjectMilestone[];
   teamMembers: string[]; // Clerk userIds
@@ -91,7 +91,7 @@ const ProjectSchema = new Schema<IProject>(
     },
     privacy: {
       type: String,
-      enum: ['Private', 'RoomWide', 'Public'],
+      enum: ['Private', 'Public'],
       default: 'Public',
     },
     goals: [ProjectGoalSchema],

@@ -5,6 +5,84 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Direct Chat — Full-Screen DM View] - 2026-10-29
+
+### Changed
+- **`/chats` page redesigned as a routing dispatcher ([`chats/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/chats/page.tsx))**:
+  - **`?dm=userId`** → renders `DirectChatView`: full-width 1:1 chat with header (avatar, name, online status, call buttons), message stream, input bar, and right contact panel. **No Messages Hub sidebar.** Back arrow returns to previous page.
+  - **No params** → renders `MessagesHubView`: the existing Messages Hub with `ChatSidebar` for browsing channels and DMs.
+- Extracted shared `ChatStream` sub-component used by both views to avoid code duplication.
+
+
+### Changed & Added
+- **Sidebar DM section redesigned ([`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx))**:
+  - Removed the standalone "Direct Messages" nav item — DMs now live directly inside the sidebar panel, matching the screenshots.
+  - The **DIRECT MESSAGES** section now derives the list from real project teammates via `useProjects()` instead of a hardcoded static array.
+  - Shows real online/offline presence dots (from `useSocket().onlineUsers`) and per-teammate unread badges.
+  - Inline list shows up to 6 teammates; overflow count shown on "More People" button.
+- **`+` icon on DIRECT MESSAGES header** opens the new `NewMessageModal`.
+- **"More People" button** also opens the same modal with the full teammate network.
+- **`NewMessageModal` ([`NewMessageModal.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/NewMessageModal.tsx))** — Tiered discovery flow:
+  - **Tier 1 (Teammate search)**: Search by display name across all users who share at least one project with the current user. No global user table scan.
+  - **Tier 3 (Exact email)**: If the query contains `@`, switches to an email-lookup UI with a CTA that routes to `/chats?email=...` for server-side exact-match resolution.
+  - Keyboard accessible: `Esc` closes, hover shows "Message" CTA per row.
+
+
+### Added & Enhanced
+- **Multi-Window Unfocused Toast & Sound Triggers ([`ChatNotificationContext.tsx`](file:///d:/Synca-FYP/apps/web/src/context/ChatNotificationContext.tsx))**:
+  - Integrated `document.hasFocus()` and `document.hidden` detection: side-by-side or background windows now immediately receive the interactive top-right glassmorphic toast and audio chime.
+  - Added a window `focus` event listener that automatically marks the active conversation as read as soon as the user returns to or focuses the window.
+  - Handled `AudioContext` autoplay suspended state with automatic `resume()`.
+- **Zero-Duplicate Server Broadcasting ([`handlers.ts`](file:///d:/Synca-FYP/apps/api/src/socket/handlers.ts))**:
+  - Implemented Socket.io chained `.to(projectRoom).to(userRoom).emit(...)` broadcasting so sockets belonging to both rooms receive the packet exactly once.
+  - Added `dm:join` and `dm:leave` socket handlers for DM lifecycle management.
+- **Client-Attached Authenticated Profiles ([`message.ts`](file:///d:/Synca-FYP/packages/zod-schemas/src/message.ts), [`useChat.ts`](file:///d:/Synca-FYP/apps/web/src/hooks/useChat.ts), [`message.controller.ts`](file:///d:/Synca-FYP/apps/api/src/controllers/message.controller.ts))**:
+  - Updated `sendMessageSchema` to accept `senderName` and `senderAvatar` directly from Clerk's active user session.
+  - Messages display the user's authentic name and avatar immediately with zero fallback lag or Clerk rate-limiting issues.
+- **Unread Badge Indicators Everywhere**:
+  - Added live pulsing unread badge to the **"Conversation"** tab button inside [`projects/[id]/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/[id]/page.tsx) so team members on the Kanban board or List view are notified of new project messages.
+  - Added direct `#general` conversation chat icons with unread badges next to projects in [`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx).
+  - Attached unread badge counters to teammates in the sidebar's Direct Messages list.
+- **Clear UX Separation of Project Conversations & 1:1 DMs**:
+  - Project conversations live directly inside each project's workspace at `/projects/[id]?tab=conversation`.
+  - `/chats` is dedicated to 1:1 direct messages with collaborators across joined projects.
+  - Added quick-link to open project conversations from `/chats` sidebar and from the main sidebar.
+
+## [Phase 4 — Real-Time Messaging Completed] - 2026-10-29
+
+### Added & Completed (Phase 4 Milestone)
+- **Real-Time WebSockets & Socket.io Client Provider ([`SocketContext.tsx`](file:///d:/Synca-FYP/apps/web/src/context/SocketContext.tsx))**:
+  - Implemented persistent WebSocket client authenticated via Clerk session JWT on handshake.
+  - Added auto-reconnect with token refresh, online presence tracking, and global connection health monitoring.
+  - Wrapped `(app)/layout.tsx` in `<SocketProvider>`.
+- **Reactive Chat Hook ([`useChat.ts`](file:///d:/Synca-FYP/apps/web/src/hooks/useChat.ts))**:
+  - Supports both `channel` and `dm` room scopes with automatic join/leave lifecycle (`project:join/leave`, `dm:join/leave`).
+  - Cursor-based message history pagination with auto-scrolling.
+  - Real-time listeners for `message:new`, `message:deleted`, `message:reaction`, and `typing:update`.
+  - Optimistic message sending with rollback fallback and REST API fallback.
+- **Dynamic Real-Time Chat Page ([`chats/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/chats/page.tsx))**:
+  - Replaced static mockup with fully functional live messaging interface.
+  - **Conversations Sidebar ([`ChatSidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/ChatSidebar.tsx))**: Project channels (`#general`) and direct messages with live online/offline presence dots and search filtering.
+  - **Interactive Message Bubbles ([`MessageBubble.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/MessageBubble.tsx))**: Sender avatars, timestamps, Cloudinary file attachments, quick emoji reactions, and sender-only deletion.
+  - **Chat Authoring Bar ([`ChatInput.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/ChatInput.tsx))**: Expanding message box with Enter-to-send, typing debounce, emoji picker popover, and Cloudinary file uploads.
+  - **Contact & Channel Drawer ([`ContactProfileDrawer.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/ContactProfileDrawer.tsx))**: Project join-code copy card, roster counts, and security indicators.
+- **Project Embedded Conversation Tab ([`ProjectConversationTab.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/ProjectConversationTab.tsx))**:
+  - Added a dedicated **"Conversation"** tab to the Project Detail view ([`projects/[id]/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/[id]/page.tsx)) allowing teammates to chat directly inside their project workspace.
+- **Optimistic Deduplication & Bubble Grouping ([`useChat.ts`](file:///d:/Synca-FYP/apps/web/src/hooks/useChat.ts), [`chatUtils.ts`](file:///d:/Synca-FYP/apps/web/src/lib/chatUtils.ts), [`MessageBubble.tsx`](file:///d:/Synca-FYP/apps/web/src/components/chat/MessageBubble.tsx))**:
+  - Fixed duplicate messages caused by optimistic temp message not being replaced upon server broadcast.
+  - Implemented consecutive bubble grouping (Slack/iMessage style): groups messages from the same sender within 5 minutes, suppresses redundant avatars and headers, flattens adjacent bubble corners, and renders centered date dividers ("Today", "Yesterday").
+  - Deep-linked DM navigation via query parameters (`/chats?dm=userId`).
+
+## [Docs Cleanup — Project-Centric Sync] - 2026-10-29
+
+### Changed
+- Rewrote [`docs/realtime-security.md`](file:///d:/Synca-FYP/docs/realtime-security.md) to the project-scoped `Admin` / `Moderator` / `Member` model; removed Room-era Owner/Manager/Viewer/Guest matrix; documented socket rooms, chat moderation, and rate limits for `/projects` + `message:send`.
+- Expanded [`docs/database.md`](file:///d:/Synca-FYP/docs/database.md) with `Message`, `FileRef`, and `Notification` schemas, Message indexes, Redis presence/unread keys; deprecated `RoomWide` privacy.
+- Clarified [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md): join-code visibility (Admin/Mod only), sole-Admin/owner guards, private-task UI label, Phase 4 messaging matrix.
+- Completed messaging REST + Socket sections in [`docs/api.md`](file:///d:/Synca-FYP/docs/api.md); added project-centric domain model to [`docs/architecture.md`](file:///d:/Synca-FYP/docs/architecture.md).
+- Synced [`CONTEXT.md`](file:///d:/Synca-FYP/CONTEXT.md): Phase 4 MVP scope, Phase 5 renamed to **Notifications & Mentions**, messaging deprecation notes.
+- Marked [`SYNCA_README.md`](file:///d:/Synca-FYP/SYNCA_README.md) as a **legacy** product brief pointing to `CONTEXT.md` / `docs/` as source of truth.
+
 ## [Collaborative Task Visibility & Permission Refinement] - 2026-10-29
 
 ### Enhanced
@@ -19,6 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation Alignment**:
   - Updated [`docs/roles-and-permissions.md`](file:///d:/Synca-FYP/docs/roles-and-permissions.md) with comprehensive task visibility and action permission matrices.
   - Updated [`docs/api.md`](file:///d:/Synca-FYP/docs/api.md) and [`CONTEXT.md`](file:///d:/Synca-FYP/CONTEXT.md) to reflect the refined collaborative RBAC architecture.
+- **Redis Connection Resilience ([`apps/api/src/lib/redis.ts`](file:///d:/Synca-FYP/apps/api/src/lib/redis.ts))**:
+  - Configured socket `reconnectStrategy` with exponential backoff and a 5-retry limit to prevent terminal spam when Upstash or Redis endpoints are unreachable.
 
 ## [Phase 3 Improvements & Fixes] - 2026-09-27
 

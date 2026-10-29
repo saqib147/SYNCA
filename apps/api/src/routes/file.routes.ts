@@ -5,23 +5,24 @@ import { FILE_LIMITS } from '@synca/config';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { uploadToCloudinary } from '../lib/cloudinary.js';
 import { FileRef } from '../models/FileRef.js';
+import { findActiveProject, isProjectMember } from '../utils/membership.js';
 
 const router = Router();
 
-// Setup multer memory storage configuration
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: FILE_LIMITS.MAX_FILE_SIZE_BYTES, // Limit to 25 MB
+    fileSize: FILE_LIMITS.MAX_FILE_SIZE_BYTES,
   },
 });
 
 router.post('/upload', requireAuth, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const file = req.file;
-    const { roomId } = req.body;
+    const { projectId } = req.body;
+    // Back-compat: accept legacy roomId as projectId
+    const scopeId = projectId || req.body.roomId || null;
 
-    // 1. Validate file exists in request payload
     if (!file) {
       return res.status(400).json({
         success: false,
@@ -32,29 +33,16 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       });
     }
 
-    // 2. Validate Room ID exists
-    if (!roomId) {
+    if (scopeId && !mongoose.Types.ObjectId.isValid(scopeId)) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Room ID is required to associate this file reference',
+          message: 'Invalid project ID format provided',
         },
       });
     }
 
-    // 3. Validate MongoDB Room ID format
-    if (!mongoose.Types.ObjectId.isValid(roomId)) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid Room ID format provided',
-        },
-      });
-    }
-
-    // 4. Validate MIME type against workspace allowed lists
     if (!FILE_LIMITS.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       return res.status(400).json({
         success: false,
@@ -67,13 +55,25 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
 
     const uploaderId = (req as any).auth.userId;
 
-    // 5. Upload buffer stream to Cloudinary (partition by room namespace)
-    const cloudinaryResult = await uploadToCloudinary(file.buffer, `synca-room-${roomId}`);
+    if (scopeId) {
+      const project = await findActiveProject(scopeId);
+      if (!project || !isProjectMember(project, uploaderId)) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'You must be a project member to upload files here',
+          },
+        });
+      }
+    }
 
-    // 6. Save tracking reference in MongoDB
+    const folder = scopeId ? `synca-project-${scopeId}` : `synca-user-${uploaderId}`;
+    const cloudinaryResult = await uploadToCloudinary(file.buffer, folder);
+
     const fileRef = new FileRef({
       uploaderId,
-      roomId: new mongoose.Types.ObjectId(roomId),
+      projectId: scopeId ? new mongoose.Types.ObjectId(scopeId) : null,
       cloudinaryPublicId: cloudinaryResult.public_id,
       cloudinaryUrl: cloudinaryResult.secure_url,
       fileName: file.originalname,
@@ -83,7 +83,6 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
 
     await fileRef.save();
 
-    // 7. Return standard JSON API envelope
     return res.status(201).json({
       success: true,
       data: {
@@ -92,9 +91,9 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
         fileSize: fileRef.fileSize,
         fileType: fileRef.fileType,
         cloudinaryUrl: fileRef.cloudinaryUrl,
+        projectId: fileRef.projectId,
       },
     });
-
   } catch (error: any) {
     console.error('[FileUpload] Exception thrown during upload stream processing:', error);
     return res.status(500).json({

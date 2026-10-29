@@ -1,6 +1,10 @@
 # Synca — Collaborative Workspace Platform
 
-> A unified project management and real-time communication platform for teams. Members work inside **Rooms** (organizations/workspaces), collaborate on projects, chat in channels or direct messages, share files, and track tasks — all in one place.
+> ⚠️ **LEGACY PRODUCT BRIEF** — This document describes the original Room/Workspace-centric design.  
+> **Active architecture & contracts**: [`CONTEXT.md`](./CONTEXT.md) and [`docs/`](./docs/).  
+> **Current model**: Projects are the top-level boundary with roles `Admin` | `Moderator` | `Member`. Rooms/Workspaces are removed.
+
+> Historical summary: A unified project management and real-time communication platform for teams (originally Room-scoped). Prefer `CONTEXT.md` for implementation decisions.
 
 ---
 

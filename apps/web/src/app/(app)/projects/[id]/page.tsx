@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, useUser } from '@clerk/nextjs';
 import {
@@ -27,6 +27,7 @@ import {
   KeyRound,
   Copy,
   RefreshCw,
+  MessageSquare,
 } from 'lucide-react';
 import { useTasks, notifyTasksChanged } from '@/hooks/useTasks';
 import { notifyProjectsChanged } from '@/hooks/useProjects';
@@ -39,6 +40,8 @@ import {
 } from '@/lib/api/project.api';
 import { ProjectKanbanBoard } from '@/components/project/ProjectKanbanBoard';
 import { ProjectTaskTable } from '@/components/project/ProjectTaskTable';
+import { ProjectConversationTab } from '@/components/project/ProjectConversationTab';
+import { useChatNotifications } from '@/context/ChatNotificationContext';
 import { TaskModal } from '@/components/task/TaskModal';
 import { TaskDetailModal } from '@/components/task/TaskDetailModal';
 import { EditTeamModal } from '@/components/project/EditTeamModal';
@@ -55,10 +58,27 @@ export default function ProjectDetailPage({
   const router = useRouter();
   const { getToken } = useAuth();
   const { user } = useUser();
+  const { unreadCounts } = useChatNotifications();
+
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
 
   const [project, setProject] = useState<EnrichedProject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'list' | 'settings'>('board');
+  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'list' | 'settings' | 'conversation'>(() => {
+    if (tabParam && ['overview', 'board', 'list', 'settings', 'conversation'].includes(tabParam)) {
+      return tabParam as any;
+    }
+    return 'board';
+  });
+
+  const channelUnread = unreadCounts[`channel_${String(project?._id || '')}`] || 0;
+
+  useEffect(() => {
+    if (tabParam && ['overview', 'board', 'list', 'settings', 'conversation'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam]);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isResettingCode, setIsResettingCode] = useState(false);
 
@@ -397,6 +417,7 @@ export default function ProjectDetailPage({
           {[
             { id: 'board', label: 'Board (Kanban)', icon: Kanban },
             { id: 'list', label: 'List View', icon: List },
+            { id: 'conversation', label: 'Conversation', icon: MessageSquare },
             { id: 'overview', label: 'Overview & Goals', icon: FileText },
             { id: 'settings', label: 'Settings & Team', icon: Settings2 },
           ].map((tab) => {
@@ -408,7 +429,7 @@ export default function ProjectDetailPage({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all',
+                  'flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all relative',
                   isActive
                     ? 'bg-zinc-900 dark:bg-white/[0.12] text-white dark:text-[#d8f870] shadow-sm'
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-white/[0.04]'
@@ -416,11 +437,24 @@ export default function ProjectDetailPage({
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
+                {tab.id === 'conversation' && channelUnread > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-bold text-[10px] animate-pulse">
+                    {channelUnread}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Tab: Conversation */}
+      {activeTab === 'conversation' && (
+        <ProjectConversationTab
+          projectId={String(project._id)}
+          projectName={project.name}
+        />
+      )}
 
       {/* Tab: Kanban Board */}
       {activeTab === 'board' && (

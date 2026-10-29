@@ -25,7 +25,7 @@ export const createProjectSchema = z.object({
   slug: z.string().optional(),
   description: z.string().max(2000).optional(),
   status: z.enum(['OnTrack', 'ActiveSprint', 'AtRisk', 'Completed', 'Archived']).default('ActiveSprint'),
-  privacy: z.enum(['Private', 'RoomWide', 'Public']).default('Public'),
+  privacy: z.enum(['Private', 'Public']).default('Public'),
   teamMembers: z.array(z.string()).optional().default([]),
   members: z.array(projectTeamMemberSchema).optional().default([]),
   goals: z.array(projectGoalSchema).optional().default([]),

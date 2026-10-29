@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IFileRef extends Document {
   uploaderId: string;
-  roomId: mongoose.Types.ObjectId;
+  projectId: mongoose.Types.ObjectId | null;
   cloudinaryPublicId: string;
   cloudinaryUrl: string;
   fileName: string;
@@ -15,7 +15,7 @@ export interface IFileRef extends Document {
 const FileRefSchema = new Schema<IFileRef>(
   {
     uploaderId: { type: String, required: true, index: true },
-    roomId: { type: Schema.Types.ObjectId, required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', default: null, index: true },
     cloudinaryPublicId: { type: String, required: true },
     cloudinaryUrl: { type: String, required: true },
     fileName: { type: String, required: true },
@@ -24,14 +24,12 @@ const FileRefSchema = new Schema<IFileRef>(
     deletedAt: { type: Date, default: null },
   },
   {
-    timestamps: { createdAt: 'uploadedAt', updatedAt: false }, // Automatically maps to uploadedAt
+    timestamps: { createdAt: 'uploadedAt', updatedAt: false },
   }
 );
 
-// Indexes defined in docs/database.md
-FileRefSchema.index({ roomId: 1, deletedAt: 1 });
+FileRefSchema.index({ projectId: 1, deletedAt: 1 });
 
-// Pre-find query middleware to filter out soft-deleted files automatically
 FileRefSchema.pre(/^find/, function (this: any) {
   if (this.getFilter().deletedAt === undefined) {
     this.where({ deletedAt: null });

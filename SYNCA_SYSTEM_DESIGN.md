@@ -1,6 +1,9 @@
 # Synca — System Design & Engineering Plan
 
-> Production-grade architecture reference. Every decision here prioritizes correctness, security, and maintainability over speed-of-prototyping. Read this before writing any code.
+> ⚠️ **LEGACY ENGINEERING BRIEF** — Prefer [`CONTEXT.md`](./CONTEXT.md) and [`docs/`](./docs/) (`architecture.md`, `database.md`, `realtime-security.md`, `api.md`, `roles-and-permissions.md`) for the **active** project-centric contracts.  
+> This file retains historical ADRs and deep-dive notes; where it conflicts (Rooms/Workspaces, 6-role RBAC), the `/docs/` files win.
+
+> Production-grade architecture reference. Every decision here prioritizes correctness, security, and maintainability over speed-of-prototyping.
 
 ---
 

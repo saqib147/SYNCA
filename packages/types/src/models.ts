@@ -1,37 +1,16 @@
-import { Role, Permission } from './permissions.js';
+import type { ProjectRole } from './permissions.js';
 
 export interface User {
   id: string; // Clerk userId
   email: string;
   name: string;
   avatarUrl?: string;
-  role: Role;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface Room {
-  id: string;
-  name: string;
-  description?: string;
-  avatarUrl?: string;
-  ownerId: string;
-  inviteCode: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface RoomMember {
-  id: string;
-  roomId: string;
-  userId: string;
-  role: Role;
-  customPermissions: Permission[];
-  joinedAt: Date;
 }
 
 export type ProjectStatus = 'OnTrack' | 'ActiveSprint' | 'AtRisk' | 'Completed' | 'Archived';
-export type ProjectPrivacy = 'Private' | 'RoomWide' | 'Public';
+export type ProjectPrivacy = 'Private' | 'Public';
 
 export interface ProjectGoal {
   title: string;
@@ -52,8 +31,6 @@ export interface Milestone {
   createdAt?: Date | string;
   updatedAt?: Date | string;
 }
-
-export type ProjectRole = 'Admin' | 'Moderator' | 'Member';
 
 export interface ProjectTeamMember {
   userId: string;
@@ -130,38 +107,47 @@ export interface Reaction {
 }
 
 export interface Message {
-  id: string;
-  roomId: string;
+  id?: string;
+  _id?: string;
   channelType: ChannelType;
-  channelId: string; // target userId (DM) or projectId (Channel)
+  channelId: string; // projectId (channel) or sorted "userA:userB" (dm)
+  projectId?: string | null;
   senderId: string;
+  senderName?: string;
+  senderAvatar?: string;
   content: unknown; // Tiptap JSON or structured content
+  plainText?: string;
   attachments?: string[]; // fileRefIds
   reactions?: Reaction[];
-  deletedAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  mentions?: string[];
+  deletedAt?: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export interface FileRef {
-  id: string;
+  id?: string;
+  _id?: string;
   uploaderId: string;
-  roomId: string;
+  projectId?: string | null;
   cloudinaryPublicId: string;
   cloudinaryUrl: string;
   fileName: string;
   fileSize: number;
   fileType: string;
-  uploadedAt: Date;
+  deletedAt?: Date | string | null;
+  uploadedAt: Date | string;
 }
 
 export type NotificationType = 'TaskAssigned' | 'Mentioned' | 'MessageReceived';
 
 export interface Notification {
-  id: string;
+  id?: string;
+  _id?: string;
   userId: string;
   type: NotificationType;
   referenceId: string;
+  projectId?: string | null;
   read: boolean;
-  createdAt: Date;
+  createdAt: Date | string;
 }

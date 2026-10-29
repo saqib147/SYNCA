@@ -6,9 +6,18 @@ if (!REDIS_URL) {
   throw new Error('Please define the REDIS_URL environment variable in .env or .env.local');
 }
 
-// Create the Redis client instance using the configured URL
+// Create the Redis client instance with a capped reconnect strategy to prevent log flooding
 export const redisClient = createClient({
   url: REDIS_URL,
+  socket: {
+    reconnectStrategy: (retries) => {
+      if (retries > 5) {
+        console.error('[Redis] Max reconnection attempts reached (5). Stopping auto-reconnect.');
+        return new Error('Redis max reconnection attempts exceeded');
+      }
+      return Math.min(retries * 500, 3000);
+    },
+  },
 });
 
 // Setup event monitoring
