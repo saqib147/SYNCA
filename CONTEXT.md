@@ -16,7 +16,7 @@
   - **`Moderator`**: Manages project tasks, goals, milestones, invites, and channel message moderation.
   - **`Member`**: Collaborates on tasks, Kanban cards, subtasks, and project channels.
 - **Tasks**: Work items assigned within projects or personal private tasks (`projectId: null`). Public project tasks are visible to all members; private project tasks are scoped to creator/assignees (+ Admin/Mod oversight).
-- **Messaging (Phase 4)**: Real-time 1:1 DMs and **one default `#general` channel per project** with rich-text (Tiptap), `@mentions`, emoji reactions, and file attachments. Multi-named channels are deferred.
+- **Messaging (Phase 4)**: Real-time 1:1 DMs and **one default `#general` channel per project** with emoji reactions, typing indicators, presence, unread badges/toasts, and Cloudinary file attachments. Multi-named channels, Tiptap rich-text, and `@mentions` are scheduled for Phase 5+.
 - **File Sharing**: Cloudinary-backed file attachments with file cards and signed private URLs.
 
 > **Deprecated**: Room / Workspace layers, `RoomWide` privacy, and legacy roles (`Owner`, `Manager`, `Viewer`, `Guest`). See `SYNCA_README.md` (legacy product brief) vs this file (active truth).
@@ -28,7 +28,7 @@
 | Layer | Technology / Choice | Details / Reason |
 |---|---|---|
 | **Architecture** | Monorepo (Turborepo) | Shared TypeScript types (`packages/types`), Zod schemas (`packages/zod-schemas`), apps `apps/web` & `apps/api` |
-| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), ThemeContext (`light` / `dark` / `system` with zero-FOUC script), TanStack Query v5, Tiptap, Recharts |
+| **Frontend** | Next.js 14+ (App Router) | TypeScript, Tailwind CSS (class-based dark mode), ThemeContext (`light` / `dark` / `system` with zero-FOUC script), `@dnd-kit`, custom React hooks + SWR-style user-scoped caches |
 | **Backend** | Express.js + Socket.io | Standalone Node.js Express server on Render for persistent WebSockets |
 | **Primary DB** | MongoDB Atlas (Mongoose) | Flexible JSON document storage for projects, tasks, channels, and milestones |
 | **Caching & Pub/Sub** | Upstash Redis | Serverless Redis for query caching, rate-limiting, presence, unread, and Socket.io multi-instance scaling |
@@ -53,6 +53,7 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `GET` | `/api/v1/projects` | List all active projects the user belongs to | Authenticated |
 | `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Goals, Milestones, Enriched Roster) | Project Member |
 | `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, or milestones | Admin / Moderator |
+| `POST` | `/api/v1/projects/:id/members` | Add member directly by exact email or shared-project userId (rate-limited) | Admin / Moderator |
 | `PATCH` | `/api/v1/projects/:id/members/:userId/role` | Promote/demote project member (`Admin`, `Moderator`, `Member`) | Project Admin |
 | `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove member from project or leave project | Project Admin or Self |
 | `POST` | `/api/v1/projects/:id/join-code/reset` | Regenerate project join code | Project Admin |
@@ -91,15 +92,15 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `GET` | `/api/v1/users/teammates` | Get unique project collaborators enriched with Clerk profiles | Authenticated |
-| `GET` | `/api/v1/users/:userId/profile` | Get individual user display profile (name & avatar) | Authenticated |
+| `GET` | `/api/v1/users/teammates` | Get unique project collaborators enriched with Clerk profiles (batched) | Authenticated |
+| `GET` | `/api/v1/users/lookup?email=` | Tier 3 exact email lookup (rate-limited, exact match only) | Authenticated |
+| `GET` | `/api/v1/users/:userId/profile` | Get individual user display profile (scoped to self, shared-project teammates, or DM peers) | Authenticated (Scoped) |
 
-### 3.6 System & Webhooks
+### 3.6 System
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
 | `GET` | `/health` | Health check endpoint (DB + Redis state) | Public |
-| `POST` | `/api/webhooks/clerk` | Clerk webhook sync (`user.created`, `user.deleted`) | Clerk Svix Signature |
 
 ---
 
@@ -123,6 +124,7 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 - `message:reaction` `{ messageId, reactions }`
 - `typing:update` `{ channelId, typingUsers }`
 - `presence:update` `{ userId, status, lastSeen }`
+- `presence:sync` `{ onlineUserIds }`
 - `task:updated` `{ task, projectId }`
 - `notification:new` `Notification`
 - `error` `{ code, message }`
@@ -143,9 +145,9 @@ This repository enforces strict execution and documentation rules defined in `.a
 
 DM discovery uses a **tiered scoped approach** to prevent exposing the full user database:
 
-- **Tier 1 — Teammate Search (default)**: The "New Message" modal (`NewMessageModal.tsx`) queries only the users who share at least one project with the current user, derived client-side from `useProjects()`. The user can filter by display name.
-- **Tier 2 — Contextual Quick-Actions**: "Message" buttons on task assignees, project member lists, and conversation member rosters open a DM directly.
-- **Tier 3 — Exact Email Lookup**: If the search query contains `@`, the modal switches to an email-lookup CTA that routes to `/chats?email=...` for server-side resolution (exact match only).
+- **Tier 1 — Teammate Search (default)**: The "New Message" modal (`NewMessageModal.tsx`) queries only the users who share at least one project with the current user via `useTeammates()` (`GET /api/v1/users/teammates`). The user can filter by display name with keyboard navigation (`↑↓`, `Enter`, `Esc`).
+- **Tier 2 — Contextual Quick-Actions**: "Message" buttons on task assignees (`TaskDetailModal`) and project team rosters (`projects/[id]`) open a DM directly.
+- **Tier 3 — Exact Email Lookup**: If the search query contains `@`, the modal switches to an email-lookup CTA that routes to `/chats?email=...` and resolves via `GET /api/v1/users/lookup?email=...` (exact match only, rate-limited).
 
 ---
 

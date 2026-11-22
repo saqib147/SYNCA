@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { Message, Reaction } from '@synca/types';
 import { useSocket } from '@/context/SocketContext';
+import { notifyDmUpdated } from '@/hooks/useTeammates';
 import {
   getChannelMessages,
   getDmMessages,
@@ -78,8 +79,12 @@ export function useChat({ channelType, channelId }: UseChatProps) {
     }
   }, [channelType, channelId, nextCursor, isLoadingMore, getToken]);
 
-  // Room join/leave and event listeners
+  // Room join and event listeners
   useEffect(() => {
+    // Clear stale conversation state immediately when switching channels
+    setMessages([]);
+    setNextCursor(null);
+    setTypingUsers([]);
     loadInitialMessages();
 
     if (!socket || !channelId) return;
@@ -159,10 +164,14 @@ export function useChat({ channelType, channelId }: UseChatProps) {
     socket.on('typing:update', handleTypingUpdate);
 
     return () => {
-      if (channelType === 'channel') {
-        socket.emit('project:leave', { projectId: channelId });
-      } else {
+      // Do NOT emit project:leave on unmount — the socket must remain subscribed to
+      // joined project rooms so global unread badges & toasts keep firing on other pages.
+      if (channelType === 'dm') {
         socket.emit('dm:leave', { targetUserId: channelId });
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
       }
       socket.off('message:new', handleNewMessage);
       socket.off('message:deleted', handleMessageDeleted);
@@ -212,14 +221,23 @@ export function useChat({ channelType, channelId }: UseChatProps) {
 
       try {
         if (socket && isConnected) {
-          socket.emit('message:send', {
-            channelType,
-            channelId: clientChannelId,
-            content: content.trim(),
-            attachments,
-            senderName: resolvedSenderName,
-            senderAvatar: resolvedSenderAvatar,
-          });
+          socket.emit(
+            'message:send',
+            {
+              channelType,
+              channelId: clientChannelId,
+              content: content.trim(),
+              attachments,
+            },
+            (ack?: { ok: boolean; error?: string }) => {
+              if (ack && !ack.ok) {
+                console.error('[useChat] Socket send rejected:', ack.error);
+                setMessages((prev) => prev.filter((m) => m._id !== tempId));
+              } else if (channelType === 'dm') {
+                notifyDmUpdated();
+              }
+            }
+          );
         } else {
           // REST Fallback
           const token = await getToken();
@@ -229,8 +247,6 @@ export function useChat({ channelType, channelId }: UseChatProps) {
               channelId: clientChannelId,
               content: content.trim(),
               attachments,
-              senderName: resolvedSenderName,
-              senderAvatar: resolvedSenderAvatar,
             },
             token
           );

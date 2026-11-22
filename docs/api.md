@@ -181,8 +181,12 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
 
 ### 2.5 Users (`/api/v1/users`)
 
+#### `POST /api/v1/projects/:id/members`
+- **Description**: Directly add a collaborator to a project by exact email (`{ email, role? }`) or existing shared-project `userId` (`{ userId, role? }`). Auto-joins the added user's live sockets to `project:<id>`.
+- **Auth**: Project Admin (any role) or Moderator (`Member` role only). Rate-limited (20 req/min).
+
 #### `GET /api/v1/users/teammates`
-- **Description**: Returns all unique project collaborators across all projects the caller belongs to, enriched with real Clerk names, avatars, and shared project lists.
+- **Description**: Returns unique project collaborators **plus** existing external DM peers, enriched with real Clerk names, avatars, `sharedProjects`, `lastMessageAt`, and `lastMessagePreview`, sorted by most recent DM activity first.
 - **Auth**: Requires valid Clerk Bearer JWT.
 - **Response `200`**:
   ```json
@@ -201,8 +205,12 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
   }
   ```
 
+#### `GET /api/v1/users/lookup?email=<exact_email>`
+- **Description**: Tier 3 scoped discovery — returns minimal `{ userId, name, avatarUrl }` only on an exact email match (rate-limited: 15 req/min). Returns `404` if no match.
+- **Auth**: Requires valid Clerk Bearer JWT.
+
 #### `GET /api/v1/users/:userId/profile`
-- **Description**: Returns authenticated public profile info (name and avatar URL) for any user by Clerk ID.
+- **Description**: Returns authenticated public profile info (name and avatar URL) for a user, strictly scoped to self, shared-project collaborators, or existing DM participants (`403` otherwise; rate-limited).
 - **Auth**: Requires valid Clerk Bearer JWT.
 - **Response `200`**:
   ```json

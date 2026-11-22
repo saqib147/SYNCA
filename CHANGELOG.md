@@ -5,6 +5,83 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Figma Design Alignment — Project Creation & Project Detail Workspace (Frames 91:2549, 93:3149, 80:875)] - 2026-11-22
+
+### Fixed
+- **Project Creation Duplicate Key Error (`E11000 workspaceId_1_slug_1`) ([`mongodb.ts`](file:///d:/Synca-FYP/apps/api/src/lib/mongodb.ts), [`project.controller.ts`](file:///d:/Synca-FYP/apps/api/src/controllers/project.controller.ts))**:
+  - Automatically drops the stale legacy `workspaceId_1_slug_1` index from `projects` on MongoDB connection startup.
+  - Updated `createProject` slug collision check to loop across all documents (including soft-deleted ones) so creating a project with a reused name like `"fyp"` always generates a unique slug.
+
+### Changed & Added
+- **Project Creation & Join Flow ([`CreateProjectModal.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/CreateProjectModal.tsx), [`JoinProjectModal.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/JoinProjectModal.tsx))**:
+  - Upgraded `CreateProjectModal` into a Figma-aligned 2-step flow: Step 1 (Essentials — Name, Project Brief, visual Figma Status pills, Public/Private access cards) and Step 2 (Optional starter High-Level Goals & first Milestone), with `"Create & Open"` auto-navigating directly into the newly created project.
+  - Aligned `JoinProjectModal` to the same `#006c52` / `#66deb4` mint design system with auto-redirect into the joined workspace.
+- **Project Detail Shell & Reorganized Tabs ([`projects/[id]/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/[id]/page.tsx))**:
+  - Replaced bulky hero card with Figma's streamlined `20px` rounded white workspace shell, breadcrumb bar, contextual task search, mint `Share` button, `+ Add Task`, `Funnel Display` title, Figma status pills, and crisp underline tab navigation (`Overview`, `Board`, `List`, `Conversation`, `Settings`).
+  - **Overview Tab (Frame `91:2549`)**: 2-column bento with **Project Brief** + live stats, interactive **Key Milestones** (add, cycle `Upcoming → InProgress → Completed`, delete), **High-Level Goals** (toggle, add, delete), **Project Team** avatar strip + 1-click DM links, and **Workspace Access** (Join Code + Invite Link).
+  - **Board Tab ([`ProjectKanbanBoard.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/ProjectKanbanBoard.tsx), Frame `93:3149`)**: Crisp white bordered columns, Figma priority pills (`High Priority`, `Medium`, `Low`), mint top-accent on `In Progress` cards, subtask progress bars, compact `Done` cards, bottom `+ Add Task` bar, and mint `"Add a new column"` button.
+  - **List Tab ([`ProjectTaskTable.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/ProjectTaskTable.tsx))**: Built-in Status & Priority filter chips, inline subtask progress bars, overdue highlighting, and hover edit/delete actions.
+  - **Conversation Tab ([`ProjectConversationTab.tsx`](file:///d:/Synca-FYP/apps/web/src/components/project/ProjectConversationTab.tsx), Frame `80:875`)**: `#project-slug` mint header with overlapping member avatars, mint-tinted live message search, date dividers, and mint-bordered composer container.
+  - **Settings Tab**: Reorganized 2-column layout separating General Settings (left) from Members & Roles, Join Code, Leave Project, and Danger Zone (right).
+
+## [Figma Design Alignment — All Projects / Project Portfolio (Frame 89:1317)] - 2026-11-22
+
+### Changed & Added
+- **All Projects Page Redesign ([`projects/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/projects/page.tsx))**:
+  - Aligned layout to Figma frame `89:1317` ("Project Portfolio"): full-height `20px` rounded white surface (`dark:bg-[#111316]`), `Funnel Display` `42px` heading + subtitle, and `#f8f9fa` `#bdc9c2`-bordered header filter controls (Search, Status, Privacy, Member, and Join Code).
+  - Rebuilt project cards in a responsive 5-column bento grid matching Figma's status pills (`On Track` `#ddec6b`, `Active Sprint` `#e7e8e9`, `At Risk` `#ffdad6`), `#006c52` / `#ba1a1a` progress bars, mint-bordered (`#79deba` top-4) `Active Sprint` cards with inner `Sprint Goals` box, overlapping `32px` rounded-square real member avatars resolved via `useTeammates()`, card `...` action menu (Open, Copy Join Code, Copy Invite Link), and the final `"New Project"` tile (`91:1864`).
+
+## [Figma Design Alignment — Dashboard & Sidebar (Frame 27:594)] - 2026-11-22
+
+### Changed & Added
+- **Dashboard Exact Figma Alignment ([`dashboard/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/dashboard/page.tsx), [`TaskCard.tsx`](file:///d:/Synca-FYP/apps/web/src/components/shared/TaskCard.tsx), [`layout.tsx`](file:///d:/Synca-FYP/apps/web/src/app/(app)/layout.tsx))**:
+  - Updated light mode shell canvas to `#f3f3f3` and `20px` rounded white bento cards.
+  - Added the **Top Greeting & 3 KPI Cards Banner** (`Task Completion %`, `Active Projects`, `Team Velocity avg`) in exact `#c9c9c9` bordered `15px` cards with live metrics.
+  - Styled **Task Status** with the exact `#036867 → #79deba` teal-mint active tab pill (`Upcoming` / `Overdue` / `Completed`) and exact Figma task card gradients (`#f5ffac → #fcffe4`, `#ffdfac → #fff9ef`, white) with `#e85151` coral due pills.
+  - Matched **Completed Tasks** 7-day `#66deb4 → #4ba384` vertical capsule strips (`Mon`–`Sun`) driven by real weekly completed tasks.
+  - Added the missing **Bottom-Right Recent / Unread Chats Panel** matching Figma `UnreadChats` (`#bebebe/25` rows, vertical divider, live `lastMessagePreview`, and `#a7dac9` `Unread` pill) clicking straight into `/chats?dm=...`.
+  - Wired **Ongoing Projects** `"New ↗"` pill directly to `CreateProjectModal` and **Private Task** card to list & create real personal tasks.
+- **Sidebar Exact Figma Alignment ([`Sidebar.tsx`](file:///d:/Synca-FYP/apps/web/src/components/layout/Sidebar.tsx))**:
+  - Matched `#17181c` dark surface, `252px` width, collapsible right-edge `<` chevron button, `#f0ff7c/75` active left-edge indicator pill, `rgba(65,65,65,0.2)` nav tiles, indented `›` project sub-list, `"Chats"` section with `+` modal trigger, and `#f0ff7c/30` `"More People"` pill with overlapping real teammate avatars.
+
+## [Member Onboarding, Conversation & Direct Discovery Upgrade] - 2026-11-22
+
+### Added & Upgraded
+- **Direct Member Invites & Privacy Enforcement (`project.controller.ts`, `project.routes.ts`, `EditTeamModal.tsx`)**:
+  - Enforced `project.privacy === 'Private'` on `POST /api/v1/projects/join` (returns `403 PRIVATE_PROJECT` so join codes only work for Public projects).
+  - Added `POST /api/v1/projects/:id/members` (rate-limited, Zod-validated) allowing Admins/Moderators to add members directly by exact email or quick-add existing collaborators from other projects.
+  - Upgraded `EditTeamModal` with an **Add Member by Exact Email** form, quick-add collaborator chips, role capability legend (`Admin`, `Moderator`, `Member`), and per-member **Message** buttons.
+  - Added one-click Invite Link route (`/projects/join?code=XXXXXX`) + **Copy Invite Link** button and **Leave Project** button in Project Settings (`projects/[id]/page.tsx`).
+- **Unified Recent DM Peers & External DM Persistence (`user.controller.ts`, `useTeammates.ts`, `useChat.ts`, `ChatNotificationContext.tsx`)**:
+  - `GET /api/v1/users/teammates` now aggregates existing DM threads (`Message` collection) alongside shared-project collaborators, so Tier 3 exact-email DMs persist in the sidebar and sort by `lastMessageAt` descending (most recent chats on top).
+  - Dispatched `synca:dm-updated` on DM send/receive so new DM threads immediately appear in the sidebar without refreshing.
+- **Live Chat Presence & Real-Time Sync Upgrades (`socket/index.ts`, `socket/handlers.ts`, `SocketContext.tsx`, `task.controller.ts`, `useTasks.ts`)**:
+  - Added initial `presence:sync` snapshot on socket connect so newly connected users immediately see which collaborators are already online.
+  - Added `joinUserToProjectRoom()` and called it on project create, join, and direct member add so live sockets receive `#general` messages & notifications immediately without reloading.
+  - Upgraded DM `message:reaction`, `message:deleted`, and `typing:update` broadcasts to target both `dm:<channelId>` and participants' `user:<id>` rooms.
+  - Wired live `task:updated` Socket.io broadcasts on `updateTask`, `moveTask`, and `addTaskComment` + listener in `useTasks.ts` for real-time Kanban and Task Comment sync.
+
+## [Full Codebase Audit Remediation (Phases 0–4)] - 2026-11-22
+
+### Security & Access Control Hardening
+- **Fixed Moderator Privilege Escalation**: Omitted `members` and `teamMembers` from `updateProjectSchema` and removed direct roster overwrite in `PATCH /api/v1/projects/:id` (`project.controller.ts`).
+- **Hardened Sole-Admin & Ownership Guards**: `updateMemberRole` (now Zod-validated) and `removeMember` prevent demoting/removing the sole remaining Admin, transfer `ownerId` when an owner steps down with another Admin present, disallow silently adding non-members via role update, and evict removed users' live sockets from `project:<id>`.
+- **Fixed Private Task IDOR & Ex-Member Access**: Added unified `resolveTaskPermissions()` in `task.controller.ts` enforcing active project membership and `isPrivate` visibility across `updateTask`, `moveTask`, `deleteTask`, and `addTaskComment`.
+- **Prevented Message Sender Spoofing**: Server always resolves `senderName` and `senderAvatar` from Clerk (via shared bounded `clerk-profile.ts` cache) on both REST and Socket `message:send`.
+- **Hardened DM Channels & Typing Auth**: Canonicalized all DM `channelId`s via `canonicalizeDmChannelId()` (rejecting unsorted pairs, self-DMs, and empty peers), added Zod validation + `assertAccess` to `typing:stop` and `typing:start`, and scoped `presence:update` broadcasts to shared project rooms with multi-tab disconnect checks.
+- **Scoped User Profiles & Added Tier 3 Lookup**: Scoped `GET /api/v1/users/:userId/profile` to self, shared-project collaborators, or DM peers; added rate-limited `GET /api/v1/users/lookup?email=...` for exact email lookup.
+- **Added Rate Limiting & XSS Protection**: Added Redis-backed (with in-memory fallback) rate limiting on `projects/join`, `files/upload`, `users/lookup`, and `users/:id/profile`; validated `https?://` protocol on chat attachments in both Zod (`sendMessageSchema`) and `MessageBubble.tsx`.
+- **Completed File Routes & Global Error Handling**: Implemented `GET /api/v1/files/:id` and `DELETE /api/v1/files/:id`, removed legacy `roomId` fallback and debug route `/api/v1/protected-test`, added global JSON error handler for Multer errors in `app.ts`, escaped regex in `GET /projects?search=`, and added `ObjectId.isValid` checks across all controllers/socket handlers.
+
+### Core Functional & UX Fixes
+- **Fixed Project Notification Dropout**: Removed `project:leave` on `useChat` unmount so sockets stay subscribed to project rooms for global unread badges/toasts.
+- **Fixed Kanban Empty-Column Drag-and-Drop**: Registered `useDroppable({ id: title })` in `KanbanColumn` (`ProjectKanbanBoard.tsx`), resolved member avatars/initials on Kanban cards and `ProjectTaskTable`, and gated Edit/Delete actions by role with delete confirmation.
+- **Wired Tier 3 Email Lookup & Tier 2 Message Quick-Actions**: Added `EmailLookupView` in `chats/page.tsx` for `/chats?email=...` and "Message" quick-action links on `TaskDetailModal` assignees and project team rosters.
+- **Fixed Chat Pagination, Moderation & State**: Prevented "Load older messages" from auto-scrolling back to bottom, enabled Admin/Moderator channel message deletion in UI, cleared stale messages/profiles on channel/peer switch, added socket ack rollback for failed optimistic sends, passed `projectId` + error banner to `ChatInput`, and closed emoji picker on outside click.
+- **Fixed Caching, Hydration & Leaks**: Scoped `useProjects` and `useTeammates` caches to active `userId` (clearing on sign-out, syncing `useTeammates` on `synca:projects-changed`), switched `Sidebar` active DM detection to `useSearchParams()`, reused a single `AudioContext` and persisted unread counts in `sessionStorage` in `ChatNotificationContext`, and fixed `SocketContext` sign-out/retry cleanup.
+- **Wired Dashboard, Project Goals & Settings**: Connected Dashboard weekly chart to real completed tasks, passed real user avatar/initials to `TaskCard`, wired "New Private Task" card to `TaskModal`, added `isPrivate` toggle in `TaskModal`, added inline Goal creation & rollback on `projects/[id]`, redirected `/` to `/dashboard`, and wired Settings profile/security cards to Clerk's `openUserProfile()`.
+- **Build & Repo Hygiene**: Removed 22 stale compiled `.js`/`.d.ts` artifacts and legacy `room.ts`/`workspace.*` files from `packages/*/src/`, centralized graceful shutdown in `apps/api/src/index.ts`, added `teamMembers` + partial `slug` indexes to `Project.ts`, added `apps/web/.eslintrc.json`, and reconciled `CONTEXT.md` & `docs/api.md`.
+
 ## [Chat Header & Teammate Discovery Polish] - 2026-10-29
 
 ### Changed & Polished

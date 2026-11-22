@@ -1,10 +1,23 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { getAuth, clerkClient } from '@clerk/express';
-import { createProjectSchema, updateProjectSchema, joinProjectSchema } from '@synca/zod-schemas';
+import {
+  createProjectSchema,
+  updateProjectSchema,
+  joinProjectSchema,
+  updateMemberRoleSchema,
+  addProjectMemberSchema,
+} from '@synca/zod-schemas';
 import { Project } from '../models/Project.js';
 import { Task } from '../models/Task.js';
+import { Message } from '../models/Message.js';
 import { generateJoinCode, slugify } from '../utils/project-helpers.js';
+import { evictUserFromProjectRoom, joinUserToProjectRoom } from '../socket/index.js';
+import { fetchUserProfile, lookupUserByExactEmail } from '../utils/clerk-profile.js';
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 const getUserId = (req: Request): string | undefined => {
   try {
@@ -45,11 +58,13 @@ export async function createProject(req: Request, res: Response) {
 
     const { name, description, status, privacy, teamMembers, goals, milestones } = parseResult.data;
 
-    // Generate unique slug
-    let candidateSlug = parseResult.data.slug || slugify(name);
-    const existingSlug = await Project.findOne({ slug: candidateSlug, deletedAt: null }).lean();
-    if (existingSlug) {
-      candidateSlug = slugify(name, true);
+    // Generate unique slug (always sanitized via slugify; check all docs including soft-deleted)
+    let candidateSlug = parseResult.data.slug ? slugify(parseResult.data.slug) : slugify(name);
+    if (!candidateSlug) candidateSlug = slugify(name, true);
+    let existingSlug = await Project.findOne({ slug: candidateSlug }).lean();
+    while (existingSlug) {
+      candidateSlug = slugify(candidateSlug, true);
+      existingSlug = await Project.findOne({ slug: candidateSlug }).lean();
     }
 
     // Generate unique join code
@@ -95,6 +110,8 @@ export async function createProject(req: Request, res: Response) {
       goals: goals || [],
       milestones: milestones || [],
     });
+
+    await joinUserToProjectRoom(userId, String(newProject._id));
 
     return res.status(201).json({
       success: true,
@@ -144,8 +161,21 @@ export async function joinProject(req: Request, res: Response) {
       });
     }
 
-    // Check if user is already a member
-    const existingMember = project.members.find((m) => m.userId === userId);
+    // Enforce Private vs Public project privacy
+    const existingMember =
+      project.ownerId === userId ||
+      project.members.find((m) => m.userId === userId);
+
+    if (!existingMember && project.privacy === 'Private') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'PRIVATE_PROJECT',
+          message: 'This project is private. Ask a Project Admin or Moderator to invite you by email.',
+        },
+      });
+    }
+
     if (!existingMember) {
       project.members.push({
         userId,
@@ -157,6 +187,8 @@ export async function joinProject(req: Request, res: Response) {
       }
       await project.save();
     }
+
+    await joinUserToProjectRoom(userId, String(project._id));
 
     return res.status(200).json({
       success: true,
@@ -197,7 +229,8 @@ export async function getUserProjects(req: Request, res: Response) {
     }
 
     if (search && typeof search === 'string' && search.trim()) {
-      const regex = new RegExp(search.trim(), 'i');
+      const safeSearch = escapeRegex(search.trim().slice(0, 100));
+      const regex = new RegExp(safeSearch, 'i');
       query.$and = [{ $or: [{ name: regex }, { description: regex }] }];
     }
 
@@ -376,15 +409,6 @@ export async function updateProject(req: Request, res: Response) {
     if (updates.status) project.status = updates.status;
     if (updates.privacy) project.privacy = updates.privacy;
 
-    if (updates.members && updates.members.length > 0) {
-      project.members = updates.members.map((m) => ({
-        userId: m.userId,
-        role: m.role as any,
-        joinedAt: new Date(),
-      }));
-      project.teamMembers = updates.members.map((m) => m.userId);
-    }
-
     if (updates.goals) project.goals = updates.goals as any;
     if (updates.milestones) project.milestones = updates.milestones as any;
 
@@ -404,6 +428,144 @@ export async function updateProject(req: Request, res: Response) {
 }
 
 /**
+ * POST /api/v1/projects/:id/members
+ * Add a member directly by exact email or shared-project userId (Admin / Moderator).
+ */
+export async function addProjectMember(req: Request, res: Response) {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User session required' },
+      });
+    }
+
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid project ID' },
+      });
+    }
+
+    const parseResult = addProjectMemberSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parseResult.error.errors[0]?.message || 'Invalid member payload',
+        },
+      });
+    }
+
+    const project = await Project.findOne({ _id: id, deletedAt: null });
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    const callerRecord = project.members?.find((m) => m.userId === userId);
+    const callerRole = userId === project.ownerId ? 'Admin' : callerRecord?.role;
+
+    if (callerRole !== 'Admin' && callerRole !== 'Moderator') {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only Project Admins and Moderators can add members' },
+      });
+    }
+
+    // Moderators can only add regular Members
+    const requestedRole = callerRole === 'Admin' ? parseResult.data.role || 'Member' : 'Member';
+
+    let targetUserId = parseResult.data.userId;
+    let targetName = '';
+    let targetAvatar = '';
+
+    if (parseResult.data.email) {
+      const found = await lookupUserByExactEmail(parseResult.data.email);
+      if (!found) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'No Synca account found with that exact email address',
+          },
+        });
+      }
+      targetUserId = found.userId;
+      targetName = found.name;
+      targetAvatar = found.avatarUrl;
+    } else if (targetUserId) {
+      // Ensure caller already shares another project with this userId (scoped)
+      const sharesAnotherProject = await Project.exists({
+        deletedAt: null,
+        $and: [
+          { $or: [{ ownerId: userId }, { 'members.userId': userId }, { teamMembers: userId }] },
+          { $or: [{ ownerId: targetUserId }, { 'members.userId': targetUserId }, { teamMembers: targetUserId }] },
+        ],
+      });
+      if (!sharesAnotherProject) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Use exact email to invite users outside your projects' },
+        });
+      }
+      const prof = await fetchUserProfile(targetUserId);
+      targetName = prof.name;
+      targetAvatar = prof.avatar;
+    }
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Target user could not be resolved' },
+      });
+    }
+
+    const alreadyMember =
+      project.ownerId === targetUserId || project.members.some((m) => m.userId === targetUserId);
+    if (alreadyMember) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'ALREADY_MEMBER', message: 'This user is already a member of the project' },
+      });
+    }
+
+    project.members.push({
+      userId: targetUserId,
+      role: requestedRole,
+      joinedAt: new Date(),
+    });
+    if (!project.teamMembers.includes(targetUserId)) {
+      project.teamMembers.push(targetUserId);
+    }
+
+    await project.save();
+    await joinUserToProjectRoom(targetUserId, String(project._id));
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        userId: targetUserId,
+        name: targetName,
+        avatarUrl: targetAvatar,
+        role: requestedRole,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ProjectController] addProjectMember error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to add member to project' },
+    });
+  }
+}
+
+/**
  * PATCH /api/v1/projects/:id/members/:targetUserId/role
  * Update member role (Admin only).
  */
@@ -418,14 +580,21 @@ export async function updateMemberRole(req: Request, res: Response) {
     }
 
     const { id, targetUserId } = req.params;
-    const { role } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid project ID' },
+      });
+    }
 
-    if (!['Admin', 'Moderator', 'Member'].includes(role)) {
+    const parseResult = updateMemberRoleSchema.safeParse(req.body);
+    if (!parseResult.success) {
       return res.status(400).json({
         success: false,
         error: { code: 'VALIDATION_ERROR', message: 'Invalid role. Allowed: Admin, Moderator, Member' },
       });
     }
+    const { role } = parseResult.data;
 
     const project = await Project.findOne({ _id: id, deletedAt: null });
     if (!project) {
@@ -446,19 +615,35 @@ export async function updateMemberRole(req: Request, res: Response) {
     }
 
     const targetMember = project.members.find((m) => m.userId === targetUserId);
-    if (targetMember) {
-      targetMember.role = role as any;
-    } else {
-      project.members.push({
-        userId: targetUserId,
-        role: role as any,
-        joinedAt: new Date(),
+    if (!targetMember) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Target user is not a member of this project' },
       });
-      if (!project.teamMembers.includes(targetUserId)) {
-        project.teamMembers.push(targetUserId);
+    }
+
+    // Prevent demoting the sole remaining Admin
+    const isCurrentlyAdmin = targetMember.role === 'Admin' || project.ownerId === targetUserId;
+    if (isCurrentlyAdmin && role !== 'Admin') {
+      const otherAdmins = project.members.filter(
+        (m) => m.userId !== targetUserId && (m.role === 'Admin' || m.userId === project.ownerId)
+      );
+      if (otherAdmins.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'SOLE_ADMIN',
+            message: 'Cannot demote the sole Project Admin. Promote another Admin first.',
+          },
+        });
+      }
+      // Transfer ownership if the owner is being demoted
+      if (project.ownerId === targetUserId) {
+        project.ownerId = otherAdmins[0].userId;
       }
     }
 
+    targetMember.role = role;
     await project.save();
 
     return res.status(200).json({
@@ -489,6 +674,12 @@ export async function removeMember(req: Request, res: Response) {
     }
 
     const { id, targetUserId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid project ID' },
+      });
+    }
 
     const project = await Project.findOne({ _id: id, deletedAt: null });
     if (!project) {
@@ -509,10 +700,31 @@ export async function removeMember(req: Request, res: Response) {
       });
     }
 
+    const targetMember = project.members.find((m) => m.userId === targetUserId);
+    const isTargetAdmin = targetMember?.role === 'Admin' || project.ownerId === targetUserId;
+    if (isTargetAdmin) {
+      const otherAdmins = project.members.filter(
+        (m) => m.userId !== targetUserId && (m.role === 'Admin' || m.userId === project.ownerId)
+      );
+      if (otherAdmins.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'SOLE_ADMIN',
+            message: 'Cannot remove the sole Project Admin. Promote another Admin or delete the project.',
+          },
+        });
+      }
+      if (project.ownerId === targetUserId) {
+        project.ownerId = otherAdmins[0].userId;
+      }
+    }
+
     project.members = project.members.filter((m) => m.userId !== targetUserId);
     project.teamMembers = project.teamMembers.filter((uid) => uid !== targetUserId);
 
     await project.save();
+    await evictUserFromProjectRoom(targetUserId, String(project._id));
 
     return res.status(200).json({
       success: true,
@@ -541,6 +753,12 @@ export async function regenerateJoinCode(req: Request, res: Response) {
       });
     }
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid project ID' },
+      });
+    }
 
     const project = await Project.findOne({ _id: id, deletedAt: null });
     if (!project) {
@@ -585,7 +803,7 @@ export async function regenerateJoinCode(req: Request, res: Response) {
 
 /**
  * DELETE /api/v1/projects/:id
- * Soft delete a project and cascade to tasks.
+ * Soft delete a project and cascade to tasks and channel messages.
  */
 export async function deleteProject(req: Request, res: Response) {
   try {
@@ -597,6 +815,12 @@ export async function deleteProject(req: Request, res: Response) {
       });
     }
     const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid project ID' },
+      });
+    }
 
     const project = await Project.findOne({ _id: id, deletedAt: null });
     if (!project) {
@@ -616,14 +840,18 @@ export async function deleteProject(req: Request, res: Response) {
       });
     }
 
-    project.deletedAt = new Date();
+    const now = new Date();
+    project.deletedAt = now;
     await project.save();
 
-    // Cascade soft delete all tasks in project
-    await Task.updateMany(
-      { projectId: project._id, deletedAt: null },
-      { deletedAt: new Date() }
-    );
+    // Cascade soft delete all tasks and project channel messages
+    await Promise.all([
+      Task.updateMany({ projectId: project._id, deletedAt: null }, { deletedAt: now }),
+      Message.updateMany(
+        { channelType: 'channel', channelId: String(project._id), deletedAt: null },
+        { deletedAt: now }
+      ),
+    ]);
 
     return res.status(200).json({
       success: true,

@@ -42,10 +42,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         setSocket(null);
         setIsConnected(false);
       }
+      setOnlineUsers({});
       return;
     }
 
     let isMounted = true;
+    let authRetryCount = 0;
 
     const initSocket = async () => {
       try {
@@ -65,6 +67,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         setSocket(s);
 
         s.on('connect', () => {
+          authRetryCount = 0;
           if (isMounted) setIsConnected(true);
         });
 
@@ -73,11 +76,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         });
 
         s.on('connect_error', async (err) => {
-          // If token expired, attempt refresh
+          if (!isMounted || authRetryCount >= 3) return;
+          // If token expired, attempt refresh (capped at 3 retries)
           if (err.message.includes('Authentication') || err.message.includes('token')) {
+            authRetryCount += 1;
             try {
               const freshToken = await getToken({ skipCache: true });
-              if (freshToken && s) {
+              if (freshToken && isMounted && socketRef.current === s) {
                 s.auth = { token: `Bearer ${freshToken}` };
                 s.connect();
               }
@@ -85,6 +90,17 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
               /* ignore */
             }
           }
+        });
+
+        s.on('presence:sync', (payload: { onlineUserIds: string[] }) => {
+          if (!isMounted || !Array.isArray(payload?.onlineUserIds)) return;
+          setOnlineUsers((prev) => {
+            const next = { ...prev };
+            for (const uid of payload.onlineUserIds) {
+              next[uid] = true;
+            }
+            return next;
+          });
         });
 
         s.on('presence:update', (payload: PresenceData) => {

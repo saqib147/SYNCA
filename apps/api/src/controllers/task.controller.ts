@@ -1,9 +1,24 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { getAuth, clerkClient } from '@clerk/express';
+import { getAuth } from '@clerk/express';
 import { createTaskSchema, updateTaskSchema, moveTaskSchema, addCommentSchema } from '@synca/zod-schemas';
 import { Task } from '../models/Task.js';
 import { Project } from '../models/Project.js';
+import { isProjectMember, isProjectAdminOrMod } from '../utils/membership.js';
+import { fetchUserProfile } from '../utils/clerk-profile.js';
+import { getIO } from '../socket/index.js';
+
+function broadcastTaskUpdate(task: any) {
+  if (!task?.projectId) return;
+  const io = getIO();
+  if (!io) return;
+  // Don't broadcast private task details to the whole project room
+  if (task.isPrivate) return;
+  io.to(`project:${String(task.projectId)}`).emit('task:updated', {
+    task,
+    projectId: String(task.projectId),
+  });
+}
 
 const getUserId = (req: Request): string | undefined => {
   try {
@@ -13,15 +28,34 @@ const getUserId = (req: Request): string | undefined => {
   }
 };
 
-function isProjectAdminOrMod(project: any, userId: string): boolean {
-  if (!project) return false;
-  if (project.ownerId === userId) return true;
-  if (project.members && Array.isArray(project.members)) {
-    return project.members.some(
-      (m: any) => m.userId === userId && (m.role === 'Admin' || m.role === 'Moderator')
-    );
+/**
+ * Evaluates task permissions consistently, enforcing:
+ * 1. Removed ex-members cannot access project tasks (project must be active & user must still be a member).
+ * 2. Private project tasks (`isPrivate: true`) are invisible/inaccessible to regular members who are neither creator nor assignee.
+ */
+async function resolveTaskPermissions(task: any, userId: string) {
+  const isCreator = task.createdBy === userId;
+  const isAssignee = Boolean(task.assignees?.includes(userId));
+
+  if (!task.projectId) {
+    const canEditFull = isCreator;
+    const canCollaborate = isCreator || isAssignee;
+    return { canEditFull, canCollaborate };
   }
-  return false;
+
+  const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
+  if (!project || !isProjectMember(project, userId)) {
+    return { canEditFull: false, canCollaborate: false };
+  }
+
+  const isAdminOrMod = isProjectAdminOrMod(project, userId);
+  if (task.isPrivate && !isAdminOrMod && !isCreator && !isAssignee) {
+    return { canEditFull: false, canCollaborate: false };
+  }
+
+  const canEditFull = isCreator || isAdminOrMod;
+  const canCollaborate = true;
+  return { canEditFull, canCollaborate };
 }
 
 /**
@@ -65,7 +99,13 @@ export async function createTask(req: Request, res: Response) {
       isPrivate,
     } = parseResult.data;
 
-    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+    if (projectId) {
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid projectId format' },
+        });
+      }
       const project = await Project.findOne({ _id: projectId, deletedAt: null }).lean();
       if (!project) {
         return res.status(404).json({
@@ -74,12 +114,7 @@ export async function createTask(req: Request, res: Response) {
         });
       }
 
-      const isMember =
-        project.ownerId === userId ||
-        (project.members && project.members.some((m) => m.userId === userId)) ||
-        project.teamMembers?.includes(userId);
-
-      if (!isMember) {
+      if (!isProjectMember(project, userId)) {
         return res.status(403).json({
           success: false,
           error: { code: 'FORBIDDEN', message: 'You must be a member of this project to create tasks' },
@@ -226,23 +261,13 @@ export async function getMyTasks(req: Request, res: Response) {
       $or: [{ ownerId: userId }, { 'members.userId': userId }, { teamMembers: userId }],
     }).lean();
 
-    const adminProjectIds: any[] = [];
-    const memberProjectIds: any[] = [];
-
-    for (const p of userProjects) {
-      if (isProjectAdminOrMod(p, userId)) {
-        adminProjectIds.push(p._id);
-      } else {
-        memberProjectIds.push(p._id);
-      }
-    }
+    const activeProjectIds = userProjects.map((p) => p._id);
 
     const tasks = await Task.find({
       deletedAt: null,
       $or: [
-        { projectId: { $in: adminProjectIds } },
-        { projectId: { $in: memberProjectIds }, assignees: userId },
-        { projectId: { $in: memberProjectIds }, createdBy: userId },
+        { projectId: { $in: activeProjectIds }, assignees: userId },
+        { projectId: { $in: activeProjectIds }, createdBy: userId },
         { projectId: null, createdBy: userId },
         { projectId: null, assignees: userId },
       ],
@@ -308,32 +333,15 @@ export async function updateTask(req: Request, res: Response) {
       });
     }
 
-    // Permission check
-    const isCreator = task.createdBy === userId;
-    let isAdminOrMod = false;
-    let isProjectMember = false;
-    const isAssignee = task.assignees?.includes(userId);
+    // Permission check (enforces active membership + private task scoping)
+    const { canEditFull, canCollaborate } = await resolveTaskPermissions(task, userId);
 
-    if (task.projectId) {
-      const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-      if (project) {
-        isAdminOrMod = isProjectAdminOrMod(project, userId);
-        isProjectMember =
-          project.ownerId === userId ||
-          Boolean(project.members?.some((m) => m.userId === userId)) ||
-          Boolean(project.teamMembers?.includes(userId));
-      }
+    if (!canCollaborate) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You do not have permission to modify this task' },
+      });
     }
-
-    const canEditFull = isCreator || isAdminOrMod;
-    const canCollaborate = canEditFull || isAssignee || isProjectMember;
-
-      if (!canCollaborate) {
-        return res.status(403).json({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'You do not have permission to modify this task' },
-        });
-      }
 
       const updates = parseResult.data;
 
@@ -389,6 +397,7 @@ export async function updateTask(req: Request, res: Response) {
       if (updates.isPrivate !== undefined && canEditFull) task.isPrivate = updates.isPrivate;
 
       await task.save();
+      broadcastTaskUpdate(task);
 
       return res.status(200).json({
         success: true,
@@ -448,36 +457,21 @@ export async function moveTask(req: Request, res: Response) {
         });
       }
 
-      const isCreator = task.createdBy === userId;
-      const isAssignee = task.assignees?.includes(userId);
-      let isAdminOrMod = false;
-      let isProjectMember = false;
+      const { canCollaborate: canMove } = await resolveTaskPermissions(task, userId);
 
-      if (task.projectId) {
-        const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-        if (project) {
-          isAdminOrMod = isProjectAdminOrMod(project, userId);
-          isProjectMember =
-            project.ownerId === userId ||
-            Boolean(project.members?.some((m) => m.userId === userId)) ||
-            Boolean(project.teamMembers?.includes(userId));
-        }
+      if (!canMove) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to move this task' },
+        });
       }
-
-        const canMove = isCreator || isAssignee || isAdminOrMod || isProjectMember;
-
-        if (!canMove) {
-          return res.status(403).json({
-            success: false,
-            error: { code: 'FORBIDDEN', message: 'You must be a member of this project or task to move it' },
-          });
-        }
 
         const { newStatus, newOrder } = parseResult.data;
 
         task.status = newStatus;
         task.order = newOrder;
         await task.save();
+        broadcastTaskUpdate(task);
 
         return res.status(200).json({
           success: true,
@@ -522,17 +516,9 @@ export async function deleteTask(req: Request, res: Response) {
           });
         }
 
-        const isCreator = task.createdBy === userId;
-        let isAdminOrMod = false;
+        const { canEditFull } = await resolveTaskPermissions(task, userId);
 
-        if (task.projectId) {
-          const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-          if (project) {
-            isAdminOrMod = isProjectAdminOrMod(project, userId);
-          }
-        }
-
-        if (!isCreator && !isAdminOrMod) {
+        if (!canEditFull) {
           return res.status(403).json({
             success: false,
             error: { code: 'FORBIDDEN', message: 'Only task creators and project admins can delete tasks' },
@@ -600,42 +586,18 @@ export async function deleteTask(req: Request, res: Response) {
           });
         }
 
-        const isCreator = task.createdBy === userId;
-        const isAssignee = task.assignees?.includes(userId);
-        let isAdminOrMod = false;
-        let isProjectMember = false;
+        const { canCollaborate: canComment } = await resolveTaskPermissions(task, userId);
 
-        if (task.projectId) {
-          const project = await Project.findOne({ _id: task.projectId, deletedAt: null }).lean();
-          if (project) {
-            isAdminOrMod = isProjectAdminOrMod(project, userId);
-            isProjectMember =
-              project.ownerId === userId ||
-              Boolean(project.members?.some((m) => m.userId === userId)) ||
-              Boolean(project.teamMembers?.includes(userId));
-          }
+        if (!canComment) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'You do not have permission to comment on this task' },
+          });
         }
 
-          const canComment = isCreator || isAssignee || isAdminOrMod || isProjectMember;
-
-          if (!canComment) {
-            return res.status(403).json({
-              success: false,
-              error: { code: 'FORBIDDEN', message: 'You must be a member of this project or task to comment' },
-            });
-          }
-
-          let userName = 'User';
-          let userAvatar = '';
-          try {
-            const user = await clerkClient.users.getUser(userId);
-            if (user) {
-              userName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username || user.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'User';
-              userAvatar = user.imageUrl || '';
-            }
-          } catch (e) {
-            console.warn('[TaskController] Could not fetch Clerk user for comment:', e);
-          }
+        const profile = await fetchUserProfile(userId);
+        const userName = profile.name;
+        const userAvatar = profile.avatar;
 
           const newComment = {
             userId,
@@ -651,6 +613,7 @@ export async function deleteTask(req: Request, res: Response) {
 
           task.comments.push(newComment as any);
           await task.save();
+          broadcastTaskUpdate(task);
 
           return res.status(201).json({
             success: true,

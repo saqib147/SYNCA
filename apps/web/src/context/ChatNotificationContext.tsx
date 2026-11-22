@@ -6,6 +6,7 @@ import { useAuth } from '@clerk/nextjs';
 import { Message } from '@synca/types';
 import { useSocket } from './SocketContext';
 import { useProjects } from '@/hooks/useProjects';
+import { notifyDmUpdated } from '@/hooks/useTeammates';
 import { Hash, MessageSquare, X, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,11 +39,16 @@ const ChatNotificationContext = createContext<ChatNotificationContextValue>({
 
 export const useChatNotifications = () => useContext(ChatNotificationContext);
 
+let sharedAudioCtx: AudioContext | null = null;
+
 function playNotificationChime() {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new AudioCtx();
+    }
+    const ctx = sharedAudioCtx;
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
@@ -75,6 +81,43 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [activeChatKey, setActiveChatKey] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ChatToastItem[]>([]);
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Restore persisted unread counts for this user across page refreshes
+  useEffect(() => {
+    if (!userId || typeof window === 'undefined') {
+      setUnreadCounts({});
+      return;
+    }
+    try {
+      const saved = window.sessionStorage.getItem(`synca_unreads_${userId}`);
+      if (saved) {
+        setUnreadCounts(JSON.parse(saved));
+      } else {
+        setUnreadCounts({});
+      }
+    } catch {
+      setUnreadCounts({});
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || typeof window === 'undefined') return;
+    try {
+      window.sessionStorage.setItem(`synca_unreads_${userId}`, JSON.stringify(unreadCounts));
+    } catch {
+      /* ignore storage quota errors */
+    }
+  }, [unreadCounts, userId]);
+
+  // Clean up pending toast dismiss timers on unmount
+  useEffect(() => {
+    const timers = toastTimersRef.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
 
   const activeChatKeyRef = useRef<string | null>(activeChatKey);
   useEffect(() => {
@@ -128,6 +171,9 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
       if (msg.senderId === userId) return;
 
       const isChannel = msg.channelType === 'channel';
+      if (!isChannel) {
+        notifyDmUpdated();
+      }
       const channelTargetId = String(msg.projectId || msg.channelId);
       const conversationKey = isChannel ? `channel_${channelTargetId}` : `dm_${msg.senderId}`;
 
@@ -174,9 +220,11 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
         setToasts((prev) => [...prev.slice(-3), newToast]);
 
         // Auto-dismiss after 6 seconds
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           setToasts((prev) => prev.filter((t) => t.id !== toastId));
+          toastTimersRef.current.delete(toastId);
         }, 6000);
+        toastTimersRef.current.set(toastId, timer);
       }
     };
 

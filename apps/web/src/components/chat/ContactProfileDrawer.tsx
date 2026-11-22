@@ -120,7 +120,7 @@ export function ContactProfileDrawer({ target, project, onClose }: ContactProfil
         <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
           {isChannel
             ? 'Messages and attachments in this channel are visible to all verified project members.'
-            : 'Direct messages are end-to-end encrypted in transit and restricted to you and this recipient.'}
+            : 'Direct messages are private and restricted to you and this recipient.'}
         </p>
       </div>
     </div>

@@ -10,6 +10,7 @@ interface ChatInputProps {
   onTyping: (isTyping: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
+  projectId?: string;
 }
 
 const COMMON_EMOJIS = ['😀', '😂', '🔥', '👍', '🎉', '❤️', '🙌', '🚀', '👀', '✨', '💯', '🤔'];
@@ -19,14 +20,29 @@ export function ChatInput({
   onTyping,
   placeholder = 'Type a message...',
   disabled = false,
+  projectId,
 }: ChatInputProps) {
   const { getToken } = useAuth();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   // Auto-resize textarea height
   useEffect(() => {
@@ -71,11 +87,15 @@ export function ChatInput({
 
     const file = files[0];
     setIsUploading(true);
+    setUploadError(null);
 
     try {
       const token = await getToken();
       const formData = new FormData();
       formData.append('file', file);
+      if (projectId) {
+        formData.append('projectId', projectId);
+      }
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       const res = await fetch(`${API_URL}/api/v1/files/upload`, {
@@ -84,15 +104,18 @@ export function ChatInput({
         body: formData,
       });
 
-      if (!res.ok) throw new Error('File upload failed');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error?.message || 'File upload failed');
+      }
       const fileUrl = data.data?.cloudinaryUrl || data.data?.url || '';
 
       if (fileUrl) {
         setAttachments((prev) => [...prev, { url: fileUrl, name: file.name }]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[ChatInput] Upload error:', err);
+      setUploadError(err?.message || 'Failed to upload file');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -111,6 +134,16 @@ export function ChatInput({
 
   return (
     <div className="relative p-3 border-t border-zinc-200/80 dark:border-white/[0.08] bg-white/70 dark:bg-[#10141e]/50 backdrop-blur-md">
+      {/* Upload Error Banner */}
+      {uploadError && (
+        <div className="mb-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs flex items-center justify-between">
+          <span>{uploadError}</span>
+          <button type="button" onClick={() => setUploadError(null)} className="ml-2 hover:text-rose-400">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Pending Attachments Strip */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 pb-2">
@@ -134,7 +167,10 @@ export function ChatInput({
 
       {/* Emoji Picker Popover */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 right-16 p-2 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl grid grid-cols-6 gap-1 z-20">
+        <div
+          ref={emojiPickerRef}
+          className="absolute bottom-16 right-16 p-2 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl grid grid-cols-6 gap-1 z-20"
+        >
           {COMMON_EMOJIS.map((emoji) => (
             <button
               key={emoji}

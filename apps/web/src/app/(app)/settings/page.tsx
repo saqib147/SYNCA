@@ -1,12 +1,13 @@
 'use client';
 
-import { User, Shield, Bell, Key, Sun, Moon, Monitor, Check } from 'lucide-react';
+import { User, Shield, Bell, Key, Sun, Moon, Monitor, Check, ExternalLink } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
-import { useUser } from '@clerk/nextjs';
+import { useUser, useClerk } from '@clerk/nextjs';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { user } = useUser();
+  const { openUserProfile } = useClerk();
 
   const themeOptions = [
     {
@@ -30,7 +31,7 @@ export default function SettingsPage() {
   ];
 
   const displayName = user?.fullName || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User');
-  const userEmail = user?.primaryEmailAddress?.emailAddress || 'user@synca.io';
+  const userEmail = user?.primaryEmailAddress?.emailAddress || '';
   const userInitials = (user?.firstName?.[0] || 'U') + (user?.lastName?.[0] || '');
 
   return (
@@ -106,35 +107,53 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center gap-3">
-            <User className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Profile Information</h4>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Update avatar, display name, and title</p>
+          <button
+            type="button"
+            onClick={() => openUserProfile()}
+            className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] hover:bg-zinc-100 dark:hover:bg-white/[0.07] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center justify-between gap-3 text-left transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <User className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Profile Information</h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Update avatar, display name, and email via Clerk</p>
+              </div>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openUserProfile()}
+            className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] hover:bg-zinc-100 dark:hover:bg-white/[0.07] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center justify-between gap-3 text-left transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Key className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Security & Clerk Auth</h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Manage password, connected accounts, and 2FA</p>
+              </div>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          </button>
+
+          <div className="p-4 rounded-2xl bg-zinc-50/60 dark:bg-white/[0.02] border border-zinc-200/60 dark:border-white/[0.06] flex items-center justify-between gap-3 opacity-75">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Project Roles</h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Roles are managed per-project inside each project&apos;s team roster</p>
+              </div>
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center gap-3">
-            <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Roles & Permissions</h4>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Manage custom workspace permissions</p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center gap-3">
-            <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            <div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Notifications</h4>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Configure email and in-app alerts</p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] dark:backdrop-blur-md border border-zinc-200/60 dark:border-white/[0.06] flex items-center gap-3">
-            <Key className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            <div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Security & Clerk Auth</h4>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Manage password and 2FA settings</p>
+          <div className="p-4 rounded-2xl bg-zinc-50/60 dark:bg-white/[0.02] border border-zinc-200/60 dark:border-white/[0.06] flex items-center justify-between gap-3 opacity-75">
+            <div className="flex items-center gap-3">
+              <Bell className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">Notification Preferences</h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Planned for Phase 5 (Notifications &amp; Mentions)</p>
+              </div>
             </div>
           </div>
         </div>

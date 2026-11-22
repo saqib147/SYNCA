@@ -2,17 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { KeyRound, X, Loader2, AlertCircle } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 
 interface JoinProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (projectId: string) => void;
 }
 
 export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModalProps) {
   const { joinProject } = useProjects();
+  const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +47,14 @@ export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModa
     try {
       setIsLoading(true);
       setError(null);
-      await joinProject(cleanCode);
+      const joined = await joinProject(cleanCode);
       setJoinCode('');
-      onSuccess?.();
       onClose();
+      if (onSuccess) {
+        onSuccess(joined._id);
+      } else {
+        router.push(`/projects/${joined._id}`);
+      }
     } catch (err: any) {
       console.error('[JoinProjectModal] Error:', err);
       setError(err.message || 'Failed to join project. Check your code.');
@@ -58,43 +64,50 @@ export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModa
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+    >
       <div
-        className="relative w-full max-w-md bg-white dark:bg-[#10141e] rounded-2xl border border-zinc-200 dark:border-white/[0.1] shadow-2xl overflow-hidden p-6 text-zinc-900 dark:text-zinc-100"
+        className="relative w-full max-w-md bg-white dark:bg-[#14171c] rounded-[20px] border border-[#bdc9c2] dark:border-white/[0.1] shadow-2xl overflow-hidden text-[#191c1d] dark:text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-white/[0.08]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-lime-500/10 text-lime-600 dark:text-lime-400 border border-lime-500/20">
+        <div className="px-6 pt-6 pb-4 border-b border-[#e5e7eb] dark:border-white/[0.08] flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="size-10 rounded-[12px] bg-[#e6f7f1] dark:bg-[#006c52]/25 border border-[#79deba]/60 dark:border-[#79deba]/30 flex items-center justify-center text-[#006c52] dark:text-[#79deba] shrink-0">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Join Project</h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Enter a 6-character code to join an existing project
+              <h2 className="font-['Funnel_Display',sans-serif] font-medium text-[20px] leading-[26px] text-[#191c1d] dark:text-white">
+                Join a Project
+              </h2>
+              <p className="text-[13px] text-[#3e4944] dark:text-zinc-400 mt-0.5">
+                Enter a 6-character code for any Public workspace.
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/[0.06] transition-colors"
+            aria-label="Close modal"
+            className="p-1.5 rounded-[8px] text-[#3e4944] dark:text-zinc-400 hover:text-[#191c1d] dark:hover:text-white hover:bg-[#f3f3f3] dark:hover:bg-white/[0.08] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs">
+            <div className="flex items-center gap-2 p-3 rounded-[10px] bg-[#ffdad6] dark:bg-rose-500/15 border border-[#ba1a1a]/30 text-[#93000a] dark:text-rose-300 text-[13px]">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+            <label className="block text-[13px] font-medium text-[#191c1d] dark:text-zinc-200 mb-2">
               Project Join Code
             </label>
             <input
@@ -105,24 +118,27 @@ export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModa
                 setJoinCode(e.target.value.toUpperCase());
                 setError(null);
               }}
-              placeholder="e.g. AB12CD"
-              className="w-full px-4 py-3 text-center tracking-[0.3em] font-mono text-xl uppercase rounded-xl bg-zinc-50 dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.1] text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-lime-500/50"
+              placeholder="AB12CD"
+              className="w-full px-4 py-3 text-center tracking-[0.35em] font-mono text-[22px] uppercase rounded-[10px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[#191c1d] dark:text-white placeholder:text-[#3e4944]/40 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#006c52] dark:focus:border-[#79deba]"
               autoFocus
             />
+            <p className="text-[11px] text-[#3e4944] dark:text-zinc-500 mt-2">
+              Private projects require a direct email invite from a project Admin or Moderator.
+            </p>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-white/[0.08]">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#e5e7eb] dark:border-white/[0.08]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/[0.06] transition-colors"
+              className="px-4 py-2.5 text-[13px] font-medium rounded-[8px] text-[#3e4944] dark:text-zinc-300 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isLoading || joinCode.trim().length !== 6}
-              className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-gradient-to-r from-lime-400 to-emerald-500 text-zinc-950 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
+              className="flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold rounded-[8px] bg-[#006c52] hover:bg-[#005943] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               {isLoading ? (
                 <>
@@ -130,7 +146,7 @@ export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModa
                   <span>Joining...</span>
                 </>
               ) : (
-                <span>Join Project</span>
+                <span>Join &amp; Open</span>
               )}
             </button>
           </div>

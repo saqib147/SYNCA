@@ -13,8 +13,9 @@ import {
   ProjectFilters,
 } from '@/lib/api/project.api';
 
-// Shared in-memory cache for instant cross-component project synchronization
+// Shared in-memory cache for instant cross-component project synchronization (scoped to active userId)
 let globalProjectsCache: Project[] | null = null;
+let globalProjectsCacheUserId: string | null = null;
 
 export const notifyProjectsChanged = () => {
   if (typeof window !== 'undefined') {
@@ -23,10 +24,14 @@ export const notifyProjectsChanged = () => {
 };
 
 export function useProjects() {
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, userId } = useAuth();
 
-  const [projects, setProjects] = useState<Project[]>(() => globalProjectsCache || []);
-  const [isLoading, setIsLoading] = useState<boolean>(() => globalProjectsCache === null);
+  const [projects, setProjects] = useState<Project[]>(() =>
+    globalProjectsCache && globalProjectsCacheUserId === userId ? globalProjectsCache : []
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => !(globalProjectsCache !== null && globalProjectsCacheUserId === userId)
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Authenticated executor with automatic 401 retry
@@ -56,22 +61,28 @@ export function useProjects() {
   // Load projects user is a member of with SWR background revalidation
   const loadProjects = useCallback(
     async (filters?: ProjectFilters) => {
-      if (!isSignedIn) {
-        if (globalProjectsCache === null) {
-          setProjects([]);
-          setIsLoading(false);
-        }
+      if (!isSignedIn || !userId) {
+        globalProjectsCache = null;
+        globalProjectsCacheUserId = null;
+        setProjects([]);
+        setIsLoading(false);
         return;
       }
 
+      const hasFilters = Boolean(filters && (filters.status || filters.search));
+      const hasValidCache = globalProjectsCache !== null && globalProjectsCacheUserId === userId;
+
       try {
-        // Only trigger loading state if we have no cached data at all
-        if (!globalProjectsCache) {
+        if (!hasValidCache || hasFilters) {
           setIsLoading(true);
         }
         setError(null);
         const list = await withAuth((token) => fetchUserProjects(token, filters));
-        globalProjectsCache = list;
+        // Only update global cache for unfiltered full lists
+        if (!hasFilters) {
+          globalProjectsCache = list;
+          globalProjectsCacheUserId = userId;
+        }
         setProjects(list);
       } catch (err: any) {
         console.error('[useProjects] Failed to load projects:', err);
@@ -80,28 +91,28 @@ export function useProjects() {
         setIsLoading(false);
       }
     },
-    [isSignedIn, withAuth]
+    [isSignedIn, userId, withAuth]
   );
 
   useEffect(() => {
-    // If we have cached projects, sync immediately
-    if (globalProjectsCache) {
+    if (globalProjectsCache && globalProjectsCacheUserId === userId) {
       setProjects(globalProjectsCache);
     }
     loadProjects();
 
     const handleProjectsChanged = () => {
-      if (globalProjectsCache) {
+      if (globalProjectsCache && globalProjectsCacheUserId === userId) {
         setProjects([...globalProjectsCache]);
+      } else {
+        loadProjects();
       }
-      loadProjects();
     };
 
     window.addEventListener('synca:projects-changed', handleProjectsChanged);
     return () => {
       window.removeEventListener('synca:projects-changed', handleProjectsChanged);
     };
-  }, [loadProjects]);
+  }, [loadProjects, userId]);
 
   // Create Project with optimistic instant cache update
   const createProject = useCallback(

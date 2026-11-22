@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Project } from '../models/Project.js';
 
 export function isProjectMember(project: any, userId: string): boolean {
@@ -31,7 +32,7 @@ export function getProjectRole(project: any, userId: string): 'Admin' | 'Moderat
 }
 
 export async function findActiveProject(projectId: string) {
-  if (!projectId) return null;
+  if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) return null;
   return Project.findOne({ _id: projectId, deletedAt: null });
 }
 
@@ -41,8 +42,34 @@ export function dmChannelId(userIdA: string, userIdB: string): string {
 }
 
 export function isDmParticipant(channelId: string, userId: string): boolean {
+  if (!channelId || !userId) return false;
   const parts = channelId.split(':');
-  return parts.length === 2 && (parts[0] === userId || parts[1] === userId);
+  if (parts.length !== 2) return false;
+  const [a, b] = parts;
+  if (!a || !b || a === b) return false;
+  return a === userId || b === userId;
+}
+
+/**
+ * Canonicalizes a DM channelId (accepts either a peer userId or an `a:b` pair).
+ * Returns null if the caller is not a valid participant, peer is empty, or self-DM.
+ */
+export function canonicalizeDmChannelId(callerUserId: string, rawChannelId: string): string | null {
+  if (!callerUserId || !rawChannelId) return null;
+  const trimmed = rawChannelId.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':');
+    if (parts.length !== 2) return null;
+    const [a, b] = parts;
+    if (!a || !b || a === b) return null;
+    if (a !== callerUserId && b !== callerUserId) return null;
+    return dmChannelId(a, b);
+  }
+
+  if (trimmed === callerUserId) return null;
+  return dmChannelId(callerUserId, trimmed);
 }
 
 export function extractPlainText(content: unknown): string {

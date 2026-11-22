@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, MessageSquare, Mail, Users, Loader2, AtSign } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTeammates, Teammate } from '@/hooks/useTeammates';
+import { useSocket } from '@/context/SocketContext';
 import { cn } from '@/lib/utils';
 
 interface NewMessageModalProps {
@@ -33,9 +34,11 @@ function getColor(userId: string) {
 
 export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
   const router = useRouter();
-  const { teammates, isLoading } = useTeammates();
+  const { teammates } = useTeammates();
+  const { onlineUsers } = useSocket();
 
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,20 +47,12 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
+      setActiveIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       setQuery('');
     }
   }, [isOpen]);
-
-  // Esc to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
 
   // --- Tier 1 filter by display name / partial match ---
   const isEmailQuery = query.includes('@');
@@ -68,10 +63,39 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
     return teammates.filter((t) => t.name.toLowerCase().includes(trimmedQuery));
   }, [teammates, trimmedQuery, isEmailQuery]);
 
-  const handleSelect = (teammate: Teammate) => {
-    onClose();
-    router.push(`/chats?dm=${teammate.userId}&name=${encodeURIComponent(teammate.name)}&avatar=${encodeURIComponent(teammate.avatarUrl || '')}`);
-  };
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  const handleSelect = React.useCallback(
+    (teammate: Teammate) => {
+      onClose();
+      router.push(
+        `/chats?dm=${teammate.userId}&name=${encodeURIComponent(teammate.name)}&avatar=${encodeURIComponent(teammate.avatarUrl || '')}`
+      );
+    },
+    [onClose, router]
+  );
+
+  // Keyboard navigation: Esc, ArrowDown, ArrowUp, Enter
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'ArrowDown' && !isEmailQuery && filteredTeammates.length > 0) {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev + 1) % filteredTeammates.length);
+      } else if (e.key === 'ArrowUp' && !isEmailQuery && filteredTeammates.length > 0) {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev - 1 + filteredTeammates.length) % filteredTeammates.length);
+      } else if (e.key === 'Enter' && !isEmailQuery && filteredTeammates[activeIndex]) {
+        e.preventDefault();
+        handleSelect(filteredTeammates[activeIndex]);
+      }
+    };
+    if (isOpen) window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onClose, isEmailQuery, filteredTeammates, activeIndex, handleSelect]);
 
   if (!isOpen || !mounted) return null;
 
@@ -145,13 +169,19 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
                       </span>
                     </div>
                   )}
-                  {filteredTeammates.map((teammate) => {
+                  {filteredTeammates.map((teammate, idx) => {
                     const color = getColor(teammate.userId);
+                    const isOnline = Boolean(onlineUsers[teammate.userId]);
+                    const isHighlighted = idx === activeIndex;
                     return (
                       <button
                         key={teammate.userId}
                         onClick={() => handleSelect(teammate)}
-                        className="w-full flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/50 transition-colors text-left group"
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={cn(
+                          'w-full flex items-center gap-3 px-5 py-3 transition-colors text-left group',
+                          isHighlighted ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/50'
+                        )}
                       >
                         {/* Avatar */}
                         <div className="relative flex-shrink-0">
@@ -171,7 +201,12 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
                               {teammate.name.charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#16191e]" />
+                          <span
+                            className={cn(
+                              'absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[#16191e]',
+                              isOnline ? 'bg-emerald-400' : 'bg-zinc-600'
+                            )}
+                          />
                         </div>
 
                         {/* Info */}

@@ -20,6 +20,21 @@ export const connectMongoDB = async (): Promise<typeof mongoose> => {
     });
 
     console.log('[MongoDB] Connected successfully to Atlas connection pool');
+
+    // Drop legacy workspaceId_1_slug_1 index from pre-workspace-removal schema if still present
+    try {
+      const projectsCol = conn.connection.db?.collection('projects');
+      if (projectsCol) {
+        const indexes = await projectsCol.indexes();
+        if (indexes.some((idx) => idx.name === 'workspaceId_1_slug_1')) {
+          await projectsCol.dropIndex('workspaceId_1_slug_1');
+          console.log('[MongoDB] Dropped legacy projects index: workspaceId_1_slug_1');
+        }
+      }
+    } catch (indexErr) {
+      console.warn('[MongoDB] Legacy index cleanup skipped:', (indexErr as Error)?.message);
+    }
+
     return conn;
   } catch (error) {
     console.error('[MongoDB] Failed to connect to MongoDB Atlas:', error);
@@ -40,22 +55,12 @@ mongoose.connection.on('disconnected', () => {
   console.log('[MongoDB] Mongoose connection disconnected');
 });
 
-// Graceful termination handler
-const gracefulShutdown = async (signal: string) => {
-  if (mongoose.connection.readyState === 0) {
-    process.exit(0);
-  }
-  
+export const closeMongoDB = async () => {
+  if (mongoose.connection.readyState === 0) return;
   try {
     await mongoose.connection.close();
-    console.log(`[MongoDB] Mongoose connection pool closed gracefully via (${signal})`);
-    process.exit(0);
+    console.log('[MongoDB] Mongoose connection pool closed gracefully');
   } catch (err) {
     console.error('[MongoDB] Error occurred during Mongoose pool closing:', err);
-    process.exit(1);
   }
 };
-
-// Listen for process termination signals
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

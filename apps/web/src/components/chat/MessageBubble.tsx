@@ -30,8 +30,9 @@ export function MessageBubble({
   onDelete,
   canDelete,
 }: MessageBubbleProps) {
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const isSafeUrl = (url: string) => /^https?:\/\//i.test(url);
 
   const formatTime = (dateStr: Date | string) => {
     try {
@@ -134,12 +135,12 @@ export function MessageBubble({
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="mt-2 space-y-1.5">
-                {message.attachments.map((att, idx) => (
+                {message.attachments.filter(isSafeUrl).map((att, idx) => (
                   <a
                     key={idx}
                     href={att}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className={cn(
                       'flex items-center justify-between gap-3 p-2.5 rounded-xl border text-left transition-colors',
                       isOwn

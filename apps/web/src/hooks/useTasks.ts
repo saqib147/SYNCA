@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Task } from '@synca/types';
 import { CreateTaskInput, UpdateTaskInput, MoveTaskInput } from '@synca/zod-schemas';
+import { useSocket } from '@/context/SocketContext';
 import {
   fetchProjectTasks,
   createTaskApi,
@@ -21,6 +22,7 @@ export const notifyTasksChanged = () => {
 
 export function useTasks(projectId?: string) {
   const { getToken, isSignedIn } = useAuth();
+  const { socket } = useSocket();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -88,6 +90,24 @@ export function useTasks(projectId?: string) {
       window.removeEventListener('synca:tasks-changed', handleTasksChanged);
     };
   }, [loadTasks]);
+
+  // Live Socket.io sync for Kanban moves, task edits, and comments from teammates
+  useEffect(() => {
+    if (!socket || !projectId) return;
+
+    const handleTaskUpdated = ({ task, projectId: updatedProjectId }: { task: Task; projectId: string }) => {
+      if (String(updatedProjectId) !== String(projectId)) return;
+      setTasks((prev) => {
+        const exists = prev.some((t) => t._id === task._id);
+        return exists ? prev.map((t) => (t._id === task._id ? task : t)) : [...prev, task];
+      });
+    };
+
+    socket.on('task:updated', handleTaskUpdated);
+    return () => {
+      socket.off('task:updated', handleTaskUpdated);
+    };
+  }, [socket, projectId]);
 
   // Create Task
   const createTask = useCallback(

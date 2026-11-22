@@ -1,315 +1,615 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Plus,
   Search,
-  Filter,
   Calendar,
-  FolderKanban,
-  CheckCircle2,
-  AlertCircle,
   Clock,
-  Layers,
-  Sparkles,
-  ArrowRight,
-  Loader2,
+  AlertTriangle,
+  MoreHorizontal,
+  ChevronDown,
   KeyRound,
+  Loader2,
+  Zap,
+  Copy,
+  Link2,
+  ExternalLink,
+  Check,
+  FolderKanban,
 } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
+import { useTeammates } from '@/hooks/useTeammates';
 import { useUser } from '@clerk/nextjs';
 import { CreateProjectModal } from '@/components/project/CreateProjectModal';
 import { JoinProjectModal } from '@/components/project/JoinProjectModal';
-import { ProjectStatus } from '@synca/types';
+import { Project, ProjectStatus } from '@synca/types';
 import { cn } from '@/lib/utils';
+
+interface ResolvedMember {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'All', label: 'All Statuses' },
+  { value: 'OnTrack', label: 'On Track' },
+  { value: 'ActiveSprint', label: 'Active Sprint' },
+  { value: 'AtRisk', label: 'At Risk' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Archived', label: 'Archived' },
+];
+
+const PRIVACY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'All', label: 'Privacy: Any' },
+  { value: 'Public', label: 'Public' },
+  { value: 'Private', label: 'Private' },
+];
+
+function formatShortDate(dateInput: Date | string) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 export default function ProjectsPage() {
   const { user } = useUser();
   const { projects, isLoading } = useProjects();
+  const { teammates } = useTeammates();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [privacyFilter, setPrivacyFilter] = useState<string>('All');
+  const [memberFilter, setMemberFilter] = useState<string>('All');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Status Metrics
-  const metrics = useMemo(() => {
-    const total = projects.length;
-    const active = projects.filter((p) => p.status === 'ActiveSprint').length;
-    const onTrack = projects.filter((p) => p.status === 'OnTrack').length;
-    const atRisk = projects.filter((p) => p.status === 'AtRisk').length;
-    const completed = projects.filter((p) => p.status === 'Completed').length;
-    return { total, active, onTrack, atRisk, completed };
-  }, [projects]);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Filtered projects
+  // Close card action menu on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        menuContainerRef.current &&
+        !menuContainerRef.current.contains(e.target as Node)
+      ) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenuId]);
+
+  // Build quick lookup map for member avatars/names (teammates + current Clerk user)
+  const memberDirectory = useMemo(() => {
+    const map = new Map<string, ResolvedMember>();
+    if (user?.id) {
+      map.set(user.id, {
+        userId: user.id,
+        name: user.fullName || user.firstName || user.username || 'You',
+        avatarUrl: user.imageUrl,
+      });
+    }
+    teammates.forEach((tm) => {
+      map.set(tm.userId, {
+        userId: tm.userId,
+        name: tm.name,
+        avatarUrl: tm.avatarUrl,
+      });
+    });
+    return map;
+  }, [user, teammates]);
+
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
       const matchesStatus =
         statusFilter === 'All' ? true : p.status === statusFilter;
-      const matchesSearch =
-        !search.trim() ||
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.description && p.description.toLowerCase().includes(search.toLowerCase()));
-      return matchesStatus && matchesSearch;
-    });
-  }, [projects, statusFilter, search]);
+      const matchesPrivacy =
+        privacyFilter === 'All' ? true : p.privacy === privacyFilter;
 
-  const getStatusBadge = (status: ProjectStatus) => {
+      const memberIds =
+        p.members && p.members.length > 0
+          ? p.members.map((m) => m.userId)
+          : p.teamMembers || [];
+      const matchesMember =
+        memberFilter === 'All'
+          ? true
+          : memberFilter === 'Owned'
+            ? p.ownerId === user?.id
+            : memberIds.includes(memberFilter);
+
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.joinCode && p.joinCode.toLowerCase().includes(q));
+
+      return matchesStatus && matchesPrivacy && matchesMember && matchesSearch;
+    });
+  }, [projects, statusFilter, privacyFilter, memberFilter, search, user?.id]);
+
+  const resolveProjectMembers = (proj: Project): ResolvedMember[] => {
+    const rawIds =
+      proj.members && proj.members.length > 0
+        ? proj.members.map((m) => m.userId)
+        : proj.teamMembers || [];
+    const uniqueIds = Array.from(new Set(rawIds));
+    return uniqueIds.map((uid) => {
+      const known = memberDirectory.get(uid);
+      if (known) return known;
+      return {
+        userId: uid,
+        name: 'Member',
+      };
+    });
+  };
+
+  const handleCopy = (
+    e: React.MouseEvent,
+    text: string,
+    key: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard?.writeText(text);
+    setCopiedId(key);
+    setTimeout(() => setCopiedId((prev) => (prev === key ? null : prev)), 1800);
+  };
+
+  const renderStatusPill = (status: ProjectStatus) => {
     switch (status) {
       case 'OnTrack':
-        return {
-          label: 'On Track',
-          classes: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-          dot: 'bg-emerald-500',
-        };
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#ddec6b] px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#606a00]">
+            <span className="size-[8px] rounded-full bg-[#5a6400]" />
+            On Track
+          </span>
+        );
       case 'ActiveSprint':
-        return {
-          label: 'Active Sprint',
-          classes: 'bg-[#d8f870]/15 text-zinc-900 dark:text-[#d8f870] border-[#d8f870]/30',
-          dot: 'bg-[#d8f870]',
-        };
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] border border-[#bdc9c2] dark:border-white/[0.14] bg-[#e7e8e9] dark:bg-white/[0.08] px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#191c1d] dark:text-zinc-200">
+            <Zap className="size-3 text-[#191c1d] dark:text-[#79deba]" />
+            Active Sprint
+          </span>
+        );
       case 'AtRisk':
-        return {
-          label: 'At Risk',
-          classes: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-          dot: 'bg-rose-500',
-        };
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#ffdad6] dark:bg-rose-500/15 px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#93000a] dark:text-rose-300">
+            <span className="size-[8px] rounded-full bg-[#ba1a1a] dark:bg-rose-400" />
+            At Risk
+          </span>
+        );
       case 'Completed':
-        return {
-          label: 'Completed',
-          classes: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
-          dot: 'bg-indigo-500',
-        };
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#d3f5e8] dark:bg-emerald-500/15 px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#006c52] dark:text-emerald-300">
+            <span className="size-[8px] rounded-full bg-[#006c52] dark:bg-emerald-400" />
+            Completed
+          </span>
+        );
       case 'Archived':
       default:
-        return {
-          label: status,
-          classes: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20',
-          dot: 'bg-zinc-400',
-        };
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#e7e8e9] dark:bg-white/[0.08] px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#3e4944] dark:text-zinc-400">
+            <span className="size-[8px] rounded-full bg-[#6b7280]" />
+            {status}
+          </span>
+        );
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#2ecc8f] uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Projects Portfolio</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white mt-1">
-            Projects & Workspaces
+    <div className="min-h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] px-6 py-7 sm:px-9 sm:py-9 lg:px-11 lg:py-10 flex flex-col">
+      {/* Page Header & Filters */}
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-5 mb-9">
+        <div className="space-y-1">
+          <h1 className="font-['Funnel_Display',sans-serif] font-medium text-[34px] sm:text-[42px] leading-[1.15] tracking-[-0.96px] text-[#191c1d] dark:text-white">
+            Project Portfolio
           </h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage your project goals, join codes, board workflows, and task progress
+          <p className="text-[15px] sm:text-[16px] leading-[24px] text-[#3e4944] dark:text-zinc-400">
+            Manage and track your active initiatives.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowJoinModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-zinc-100 dark:bg-white/[0.06] hover:bg-zinc-200 dark:hover:bg-white/[0.1] text-zinc-800 dark:text-zinc-200 text-xs font-bold transition-all border border-zinc-200 dark:border-white/[0.08]"
-          >
-            <KeyRound className="w-4 h-4 text-lime-500" />
-            <span>Join with Code</span>
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-zinc-950 text-xs font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Project</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Metrics Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-            <FolderKanban className="w-4 h-4 text-lime-500" />
-            <span>Total Projects</span>
+        {/* Right Controls — Figma bordered #f8f9fa dropdowns + Search + Join with Code */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 sm:flex-none sm:w-[210px]">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#3e4944] dark:text-zinc-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-[46px] pl-10 pr-3.5 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[14px] text-[#191c1d] dark:text-white placeholder:text-[#3e4944]/70 dark:placeholder:text-zinc-500 focus:outline-none focus:border-[#006c52] dark:focus:border-[#79deba] transition-colors"
+            />
           </div>
-          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.total}</p>
-        </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-            <Clock className="w-4 h-4 text-lime-400" />
-            <span>Active Sprint</span>
-          </div>
-          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.active}</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span>On Track</span>
-          </div>
-          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.onTrack}</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm">
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-            <AlertCircle className="w-4 h-4 text-rose-500" />
-            <span>At Risk</span>
-          </div>
-          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.atRisk}</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-md border border-zinc-200 dark:border-white/[0.08] shadow-sm col-span-2 sm:col-span-1">
-          <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-xs font-medium">
-            <Layers className="w-4 h-4 text-indigo-400" />
-            <span>Completed</span>
-          </div>
-          <p className="text-xl font-black text-zinc-900 dark:text-white mt-2">{metrics.completed}</p>
-        </div>
-      </div>
-
-      {/* Filter & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-white dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.08] shadow-sm">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search projects..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-50 dark:bg-white/[0.04] border border-zinc-200 dark:border-white/[0.08] text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-lime-500/50"
-          />
-        </div>
-
-        {/* Status Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {['All', 'ActiveSprint', 'OnTrack', 'AtRisk', 'Completed'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all',
-                statusFilter === st
-                  ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm'
-                  : 'bg-zinc-100 dark:bg-white/[0.04] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-white/[0.08]'
-              )}
+          {/* All Statuses Dropdown */}
+          <div className="relative">
+            <select
+              aria-label="Filter by status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="appearance-none h-[46px] pl-4 pr-10 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[14px] text-[#191c1d] dark:text-zinc-100 focus:outline-none focus:border-[#006c52] dark:focus:border-[#79deba] cursor-pointer transition-colors"
             >
-              {st === 'All' ? 'All Status' : st}
-            </button>
-          ))}
+              {STATUS_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-[#17191d] text-[#191c1d] dark:text-white"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-[#3e4944] dark:text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Privacy Dropdown */}
+          <div className="relative">
+            <select
+              aria-label="Filter by privacy"
+              value={privacyFilter}
+              onChange={(e) => setPrivacyFilter(e.target.value)}
+              className="appearance-none h-[46px] pl-4 pr-10 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[14px] text-[#191c1d] dark:text-zinc-100 focus:outline-none focus:border-[#006c52] dark:focus:border-[#79deba] cursor-pointer transition-colors"
+            >
+              {PRIVACY_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-[#17191d] text-[#191c1d] dark:text-white"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-[#3e4944] dark:text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Member / Assignee Dropdown */}
+          <div className="relative">
+            <select
+              aria-label="Filter by member"
+              value={memberFilter}
+              onChange={(e) => setMemberFilter(e.target.value)}
+              className="appearance-none h-[46px] pl-4 pr-10 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[14px] text-[#191c1d] dark:text-zinc-100 focus:outline-none focus:border-[#006c52] dark:focus:border-[#79deba] cursor-pointer transition-colors max-w-[175px]"
+            >
+              <option
+                value="All"
+                className="bg-white dark:bg-[#17191d] text-[#191c1d] dark:text-white"
+              >
+                Member: All
+              </option>
+              <option
+                value="Owned"
+                className="bg-white dark:bg-[#17191d] text-[#191c1d] dark:text-white"
+              >
+                Owned by me
+              </option>
+              {teammates.map((tm) => (
+                <option
+                  key={tm.userId}
+                  value={tm.userId}
+                  className="bg-white dark:bg-[#17191d] text-[#191c1d] dark:text-white"
+                >
+                  {tm.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-[#3e4944] dark:text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Join with Code Action */}
+          <button
+            type="button"
+            onClick={() => setShowJoinModal(true)}
+            className="h-[46px] px-4 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] hover:bg-[#eef1f2] dark:hover:bg-white/[0.08] border border-[#bdc9c2] dark:border-white/[0.12] text-[14px] font-medium text-[#191c1d] dark:text-zinc-100 inline-flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4 text-[#006c52] dark:text-[#79deba]" />
+            <span>Join Code</span>
+          </button>
         </div>
       </div>
 
-      {/* Projects Grid */}
+      {/* Bento Grid Project Cards */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-lime-500" />
-          <p className="text-xs font-medium">Loading project portfolio...</p>
-        </div>
-      ) : filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredProjects.map((proj) => {
-            const badge = getStatusBadge(proj.status);
-            const totalGoals = proj.goals?.length || 0;
-            const completedGoals = proj.goals?.filter((g) => g.completed).length || 0;
-            const goalProgress = totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
-
-            return (
-              <Link
-                key={proj._id}
-                href={`/projects/${proj._id}`}
-                className="group relative flex flex-col justify-between p-5 rounded-3xl bg-white dark:bg-white/[0.04] dark:backdrop-blur-xl border border-zinc-200 dark:border-white/[0.08] hover:border-lime-500/50 shadow-sm hover:shadow-xl transition-all duration-300"
-              >
-                <div>
-                  {/* Top Card Row */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-lime-400/20 to-emerald-500/20 border border-lime-500/30 flex items-center justify-center text-lime-600 dark:text-lime-400 font-extrabold text-sm shrink-0">
-                        {proj.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white group-hover:text-lime-500 transition-colors line-clamp-1">
-                          {proj.name}
-                        </h3>
-                        <p className="text-[11px] text-zinc-400 font-mono">Code: {proj.joinCode}</p>
-                      </div>
-                    </div>
-
-                    <span
-                      className={cn(
-                        'px-2.5 py-1 rounded-xl text-[10px] font-bold border flex items-center gap-1.5 shrink-0',
-                        badge.classes
-                      )}
-                    >
-                      <span className={cn('w-1.5 h-1.5 rounded-full', badge.dot)} />
-                      {badge.label}
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 min-h-[2.5rem] mb-4">
-                    {proj.description || 'No description provided for this project.'}
-                  </p>
-
-                  {/* Goals Progress Bar */}
-                  <div className="space-y-1.5 mb-4">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-                      <span>Goal Progress</span>
-                      <span>{goalProgress}%</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-zinc-100 dark:bg-white/[0.08] overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-lime-400 to-emerald-500 rounded-full transition-all duration-500"
-                        style={{ width: `${goalProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card Footer */}
-                <div className="pt-3 border-t border-zinc-100 dark:border-white/[0.08] flex items-center justify-between text-xs text-zinc-400">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{new Date(proj.createdAt).toLocaleDateString()}</span>
-                  </div>
-
-                  <span className="flex items-center gap-1 text-lime-600 dark:text-lime-400 font-bold group-hover:translate-x-1 transition-transform">
-                    <span>View Project</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
+        <div className="flex-1 flex flex-col items-center justify-center py-24 text-[#3e4944] dark:text-zinc-400 gap-3">
+          <Loader2 className="w-7 h-7 animate-spin text-[#006c52] dark:text-[#79deba]" />
+          <p className="text-[14px]">Loading project portfolio...</p>
         </div>
       ) : (
-        <div className="text-center py-16 p-8 rounded-3xl bg-white dark:bg-white/[0.02] border border-dashed border-zinc-300 dark:border-white/[0.1] space-y-4">
-          <FolderKanban className="w-12 h-12 text-zinc-400 mx-auto" />
-          <div>
-            <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">No Projects Found</h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              {search || statusFilter !== 'All'
-                ? 'Try adjusting your search query or status filter.'
-                : 'Get started by creating your first project or joining one with a code.'}
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-2">
+        <>
+          {filteredProjects.length === 0 && (search || statusFilter !== 'All' || privacyFilter !== 'All' || memberFilter !== 'All') ? (
+            <div className="flex flex-col items-center justify-center text-center py-16 px-6 rounded-[8px] border border-dashed border-[#bdc9c2] dark:border-white/[0.14] bg-[#f8f9fa]/60 dark:bg-white/[0.02] mb-6">
+              <FolderKanban className="w-10 h-10 text-[#3e4944]/60 dark:text-zinc-500 mb-3" />
+              <h3 className="font-['Funnel_Display',sans-serif] text-[20px] font-medium text-[#191c1d] dark:text-white">
+                No matching projects
+              </h3>
+              <p className="text-[14px] text-[#3e4944] dark:text-zinc-400 mt-1 max-w-md">
+                Try adjusting your search or filter criteria, or create a new project below.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('All');
+                  setPrivacyFilter('All');
+                  setMemberFilter('All');
+                }}
+                className="mt-4 px-4 py-2 rounded-[8px] bg-[#191c1d] dark:bg-white text-white dark:text-[#191c1d] text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+            {filteredProjects.map((proj) => {
+              const totalGoals = proj.goals?.length || 0;
+              const completedGoals =
+                proj.goals?.filter((g) => g.completed).length || 0;
+              const goalProgress =
+                totalGoals > 0
+                  ? Math.round((completedGoals / totalGoals) * 100)
+                  : proj.status === 'Completed'
+                    ? 100
+                    : 0;
+
+              const isAtRisk = proj.status === 'AtRisk';
+              const isActiveSprint = proj.status === 'ActiveSprint';
+              const members = resolveProjectMembers(proj);
+              const visibleMembers = members.slice(0, 3);
+              const extraCount = Math.max(0, members.length - 3);
+              const isMenuOpen = openMenuId === proj._id;
+
+              return (
+                <div
+                  key={proj._id}
+                  className={cn(
+                    'group relative flex flex-col justify-between rounded-[8px] bg-white dark:bg-[#17191d] transition-all duration-200 min-h-[336px]',
+                    isActiveSprint
+                      ? 'border border-[#79deba] border-t-4 px-[25px] pt-[24px] pb-[25px] hover:shadow-[0_6px_24px_-8px_rgba(0,108,82,0.18)]'
+                      : 'border border-[#bdc9c2] dark:border-white/[0.1] p-[25px] hover:border-[#006c52] dark:hover:border-[#79deba]/60 hover:shadow-[0_6px_24px_-8px_rgba(25,28,29,0.12)]'
+                  )}
+                >
+                  {/* Full-card Link overlay (keeps menu button interactive above it) */}
+                  <Link
+                    href={`/projects/${proj._id}`}
+                    aria-label={`Open project ${proj.name}`}
+                    className="absolute inset-0 z-0 rounded-[8px]"
+                  />
+
+                  <div className="relative z-10 pointer-events-none flex flex-col flex-1">
+                    {/* Top Row: Status Pill + More Button */}
+                    <div className="flex items-start justify-between gap-2 pb-6">
+                      {renderStatusPill(proj.status)}
+
+                      <div
+                        className="relative pointer-events-auto"
+                        ref={isMenuOpen ? menuContainerRef : undefined}
+                      >
+                        <button
+                          type="button"
+                          aria-label="Project actions"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenMenuId(isMenuOpen ? null : proj._id);
+                          }}
+                          className="p-1 -mr-1 rounded-md text-[#3e4944] dark:text-zinc-400 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.08] hover:text-[#191c1d] dark:hover:text-white transition-colors cursor-pointer"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-7 z-30 w-44 rounded-[10px] bg-white dark:bg-[#1e2127] border border-[#bdc9c2] dark:border-white/[0.12] shadow-lg py-1.5 text-[13px]">
+                            <Link
+                              href={`/projects/${proj._id}`}
+                              onClick={() => setOpenMenuId(null)}
+                              className="flex items-center gap-2 px-3 py-2 text-[#191c1d] dark:text-zinc-100 hover:bg-[#f8f9fa] dark:hover:bg-white/[0.06]"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-[#3e4944] dark:text-zinc-400" />
+                              <span>Open Project</span>
+                            </Link>
+                            {proj.joinCode && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleCopy(
+                                      e,
+                                      proj.joinCode,
+                                      `code-${proj._id}`
+                                    )
+                                  }
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[#191c1d] dark:text-zinc-100 hover:bg-[#f8f9fa] dark:hover:bg-white/[0.06] cursor-pointer"
+                                >
+                                  {copiedId === `code-${proj._id}` ? (
+                                    <Check className="w-3.5 h-3.5 text-[#006c52] dark:text-[#79deba]" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5 text-[#3e4944] dark:text-zinc-400" />
+                                  )}
+                                  <span>
+                                    {copiedId === `code-${proj._id}`
+                                      ? 'Copied Code!'
+                                      : `Code: ${proj.joinCode}`}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleCopy(
+                                      e,
+                                      `${window.location.origin}/projects/join?code=${proj.joinCode}`,
+                                      `link-${proj._id}`
+                                    )
+                                  }
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[#191c1d] dark:text-zinc-100 hover:bg-[#f8f9fa] dark:hover:bg-white/[0.06] cursor-pointer"
+                                >
+                                  {copiedId === `link-${proj._id}` ? (
+                                    <Check className="w-3.5 h-3.5 text-[#006c52] dark:text-[#79deba]" />
+                                  ) : (
+                                    <Link2 className="w-3.5 h-3.5 text-[#3e4944] dark:text-zinc-400" />
+                                  )}
+                                  <span>
+                                    {copiedId === `link-${proj._id}`
+                                      ? 'Link Copied!'
+                                      : 'Copy Invite Link'}
+                                  </span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Project Title */}
+                    <h3 className="font-['Funnel_Display',sans-serif] font-medium text-[22px] sm:text-[24px] leading-[30px] text-[#191c1d] dark:text-white line-clamp-2 pb-1.5 group-hover:text-[#006c52] dark:group-hover:text-[#79deba] transition-colors">
+                      {proj.name}
+                    </h3>
+
+                    {/* Description */}
+                    <p className="text-[14px] leading-[20px] text-[#3e4944] dark:text-zinc-400 line-clamp-2 min-h-[40px] mb-6">
+                      {proj.description ||
+                        'No description provided for this project yet.'}
+                    </p>
+
+                    {/* Progress Section */}
+                    <div className="mt-auto pb-6">
+                      {isActiveSprint ? (
+                        <div className="rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.1] p-[13px] space-y-2">
+                          <div className="flex items-center justify-between gap-2 text-[12px] tracking-[0.4px]">
+                            <span className="text-[#3e4944] dark:text-zinc-400">
+                              Sprint Goals
+                            </span>
+                            <span className="text-[#006c52] dark:text-[#79deba] font-medium whitespace-nowrap">
+                              {totalGoals > 0
+                                ? `${completedGoals}/${totalGoals} Completed`
+                                : 'No goals yet'}
+                            </span>
+                          </div>
+                          <div className="h-[4px] w-full rounded-[12px] bg-[#e1e3e4] dark:bg-white/[0.1] overflow-hidden">
+                            <div
+                              className="h-full rounded-[12px] bg-[#79deba] transition-all duration-500"
+                              style={{ width: `${goalProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[14px] leading-[20px]">
+                            {isAtRisk ? (
+                              <span className="inline-flex items-center gap-1.5 text-[#ba1a1a] dark:text-rose-400">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <span>Blocked</span>
+                              </span>
+                            ) : (
+                              <span className="text-[#3e4944] dark:text-zinc-400">
+                                Progress
+                              </span>
+                            )}
+                            <span className="text-[#191c1d] dark:text-white font-medium">
+                              {goalProgress}%
+                            </span>
+                          </div>
+                          <div className="h-[8px] w-full rounded-[12px] bg-[#e1e3e4] dark:bg-white/[0.1] overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-[12px] transition-all duration-500',
+                                isAtRisk
+                                  ? 'bg-[#ba1a1a] dark:bg-rose-500'
+                                  : 'bg-[#006c52] dark:bg-[#66deb4]'
+                              )}
+                              style={{ width: `${goalProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Footer: Overlapping Avatars + Date */}
+                  <div className="relative z-10 pointer-events-none border-t border-[#bdc9c2] dark:border-white/[0.1] pt-5 flex items-center justify-between gap-2">
+                    <div className="flex items-center">
+                      {visibleMembers.length > 0 ? (
+                        <div className="flex items-center -space-x-2">
+                          {visibleMembers.map((member, idx) => (
+                            <div
+                              key={member.userId}
+                              title={member.name}
+                              style={{ zIndex: 10 - idx }}
+                              className="size-[32px] rounded-[12px] border-2 border-white dark:border-[#17191d] bg-[#e7e8e9] dark:bg-zinc-800 overflow-hidden flex items-center justify-center text-[11px] font-semibold text-[#3e4944] dark:text-zinc-200 shrink-0"
+                            >
+                              {member.avatarUrl ? (
+                                <img
+                                  src={member.avatarUrl}
+                                  alt={member.name}
+                                  className="size-full object-cover"
+                                />
+                              ) : (
+                                <span>
+                                  {member.name.charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {extraCount > 0 && (
+                            <div className="size-[32px] rounded-[12px] border-2 border-white dark:border-[#17191d] bg-[#e7e8e9] dark:bg-white/[0.1] flex items-center justify-center text-[12px] tracking-[0.4px] text-[#3e4944] dark:text-zinc-300 shrink-0 z-0">
+                              +{extraCount}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-[#3e4944] dark:text-zinc-500">
+                          Solo
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-[14px] leading-[20px] whitespace-nowrap',
+                        isAtRisk
+                          ? 'text-[#ba1a1a] dark:text-rose-400'
+                          : 'text-[#3e4944] dark:text-zinc-400'
+                      )}
+                    >
+                      {isActiveSprint ? (
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{formatShortDate(proj.updatedAt || proj.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Final Card: New Project (Figma node 91:1864) */}
             <button
-              onClick={() => setShowJoinModal(true)}
-              className="px-4 py-2 text-xs font-bold rounded-xl bg-zinc-100 dark:bg-white/[0.06] text-zinc-800 dark:text-zinc-200"
-            >
-              Join Project with Code
-            </button>
-            <button
+              type="button"
               onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 text-xs font-bold rounded-xl bg-lime-400 text-zinc-950 shadow-md"
+              className="group flex flex-col items-center justify-between rounded-[8px] bg-white dark:bg-[#17191d] border border-[#bdc9c2] dark:border-white/[0.12] border-t-4 min-h-[336px] px-6 pt-20 pb-8 hover:border-[#006c52] dark:hover:border-[#79deba] hover:bg-[#f8f9fa]/70 dark:hover:bg-white/[0.03] transition-all cursor-pointer"
             >
-              Create Project
+              <div className="flex-1 flex items-center justify-center">
+                <div className="size-[92px] rounded-full border border-[#006c52]/70 dark:border-[#79deba]/70 flex items-center justify-center group-hover:scale-105 group-hover:border-[#006c52] dark:group-hover:border-[#79deba] transition-all">
+                  <Plus className="w-10 h-10 text-[#006c52] dark:text-[#79deba] stroke-[1.5]" />
+                </div>
+              </div>
+              <span className="font-['Funnel_Display',sans-serif] font-normal text-[13px] leading-[32px] text-[#191c1d] dark:text-zinc-200 mt-4">
+                New Project
+              </span>
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {/* Modals */}

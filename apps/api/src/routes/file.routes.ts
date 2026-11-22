@@ -3,9 +3,10 @@ import multer from 'multer';
 import mongoose from 'mongoose';
 import { FILE_LIMITS } from '@synca/config';
 import { requireAuth } from '../middleware/auth.middleware.js';
-import { uploadToCloudinary } from '../lib/cloudinary.js';
+import { createRateLimiter } from '../middleware/rate-limit.middleware.js';
+import cloudinary, { uploadToCloudinary } from '../lib/cloudinary.js';
 import { FileRef } from '../models/FileRef.js';
-import { findActiveProject, isProjectMember } from '../utils/membership.js';
+import { findActiveProject, getProjectRole, isProjectMember } from '../utils/membership.js';
 
 const router = Router();
 
@@ -16,12 +17,12 @@ const upload = multer({
   },
 });
 
-router.post('/upload', requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+const uploadLimiter = createRateLimiter({ windowSeconds: 60, maxRequests: 20, keyPrefix: 'file-upload' });
+
+router.post('/upload', requireAuth, uploadLimiter, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const file = req.file;
-    const { projectId } = req.body;
-    // Back-compat: accept legacy roomId as projectId
-    const scopeId = projectId || req.body.roomId || null;
+    const scopeId = req.body.projectId || null;
 
     if (!file) {
       return res.status(400).json({
@@ -100,8 +101,130 @@ router.post('/upload', requireAuth, upload.single('file'), async (req: Request, 
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: error.message || 'An unexpected error occurred during file upload',
+        message: 'An unexpected error occurred during file upload',
       },
+    });
+  }
+});
+
+/**
+ * GET /api/v1/files/:id
+ * Retrieve file metadata & URL (requires project membership if project-scoped, or uploader if personal).
+ */
+router.get('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).auth.userId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid file ID format' },
+      });
+    }
+
+    const fileRef = await FileRef.findById(id).lean();
+    if (!fileRef) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'File not found' },
+      });
+    }
+
+    if (fileRef.projectId) {
+      const project = await findActiveProject(String(fileRef.projectId));
+      if (!project || !isProjectMember(project, userId)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You do not have access to this file' },
+        });
+      }
+    } else if (fileRef.uploaderId !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You do not have access to this file' },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: fileRef._id,
+        fileName: fileRef.fileName,
+        fileSize: fileRef.fileSize,
+        fileType: fileRef.fileType,
+        cloudinaryUrl: fileRef.cloudinaryUrl,
+        projectId: fileRef.projectId,
+        uploaderId: fileRef.uploaderId,
+        uploadedAt: fileRef.uploadedAt,
+      },
+    });
+  } catch (error) {
+    console.error('[FileGet] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve file metadata' },
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/files/:id
+ * Soft delete FileRef and remove asset from Cloudinary (uploader or project Admin).
+ */
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).auth.userId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid file ID format' },
+      });
+    }
+
+    const fileRef = await FileRef.findById(id);
+    if (!fileRef) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'File not found' },
+      });
+    }
+
+    let canDelete = fileRef.uploaderId === userId;
+    if (!canDelete && fileRef.projectId) {
+      const project = await findActiveProject(String(fileRef.projectId));
+      if (project && getProjectRole(project, userId) === 'Admin') {
+        canDelete = true;
+      }
+    }
+
+    if (!canDelete) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only the uploader or a Project Admin can delete this file' },
+      });
+    }
+
+    try {
+      await cloudinary.uploader.destroy(fileRef.cloudinaryPublicId);
+    } catch (cloudErr) {
+      console.warn('[FileDelete] Cloudinary asset destroy failed (continuing soft-delete):', cloudErr);
+    }
+
+    fileRef.deletedAt = new Date();
+    await fileRef.save();
+
+    return res.status(200).json({
+      success: true,
+      data: { id: fileRef._id, message: 'File deleted successfully' },
+    });
+  } catch (error) {
+    console.error('[FileDelete] Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to delete file' },
     });
   }
 });

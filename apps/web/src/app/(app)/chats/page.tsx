@@ -4,14 +4,12 @@ import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import {
-  Phone,
-  Video,
-  MoreVertical,
   Hash,
   MessageSquare,
   Loader2,
   ArrowLeft,
   Users,
+  AlertCircle,
 } from 'lucide-react';
 import { useProjects } from '@/hooks/useProjects';
 import { useTeammates } from '@/hooks/useTeammates';
@@ -28,10 +26,17 @@ import { cn } from '@/lib/utils';
 // ─────────────────────────────────────────────
 // Shared chat stream (used in both modes)
 // ─────────────────────────────────────────────
-function ChatStream({ target }: { target: ConversationTarget }) {
+function ChatStream({
+  target,
+  canModerate = false,
+}: {
+  target: ConversationTarget;
+  canModerate?: boolean;
+}) {
   const { userId } = useAuth();
   const { user } = useUser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   const {
     messages,
@@ -49,15 +54,22 @@ function ChatStream({ target }: { target: ConversationTarget }) {
   const { setActiveChatKey, markAsRead } = useChatNotifications();
 
   useEffect(() => {
+    lastMessageIdRef.current = null;
     const key = target.type === 'channel' ? `channel_${target.id}` : `dm_${target.id}`;
     setActiveChatKey(key);
     markAsRead(key);
     return () => setActiveChatKey(null);
   }, [target.id, target.type, setActiveChatKey, markAsRead]);
 
+  // Only auto-scroll when the newest (bottom) message changes — never when prepending older messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    const newest = messages[messages.length - 1];
+    const newestId = newest ? String(newest._id || newest.id) : null;
+    if (newestId && newestId !== lastMessageIdRef.current) {
+      lastMessageIdRef.current = newestId;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   const groupedList = useMemo(() => groupMessages(messages, userId || undefined), [messages, userId]);
 
@@ -124,7 +136,7 @@ function ChatStream({ target }: { target: ConversationTarget }) {
                   isLastInGroup={item.isLastInGroup}
                   onReact={(emoji) => reactToMessage(msg._id || msg.id || '', emoji)}
                   onDelete={() => deleteMessage(msg._id || msg.id || '')}
-                  canDelete={isOwn}
+                  canDelete={isOwn || (target.type === 'channel' && canModerate)}
                 />
               </React.Fragment>
             );
@@ -146,6 +158,7 @@ function ChatStream({ target }: { target: ConversationTarget }) {
         onSend={sendMessage}
         onTyping={setTyping}
         placeholder={`Message ${target.name}…`}
+        projectId={target.type === 'channel' ? target.id : undefined}
       />
     </>
   );
@@ -176,6 +189,7 @@ function DirectChatView({
   const [profile, setProfile] = useState<{ name: string; avatarUrl: string } | null>(null);
 
   useEffect(() => {
+    setProfile(null);
     if (peerTeammate?.name) return; // already resolved
     let mounted = true;
     (async () => {
@@ -262,19 +276,6 @@ function DirectChatView({
               </p>
             </div>
           </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 flex-shrink-0">
-            <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-              <Phone className="w-4 h-4" />
-            </button>
-            <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-              <Video className="w-4 h-4" />
-            </button>
-            <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-              <MoreVertical className="w-4 h-4" />
-            </button>
-          </div>
         </div>
 
         {/* Stream + Input */}
@@ -293,7 +294,7 @@ function DirectChatView({
 function MessagesHubView() {
   const { userId } = useAuth();
   const { projects, isLoading: isProjectsLoading } = useProjects();
-  const { isConnected } = useSocket();
+  const { onlineUsers } = useSocket();
 
   const [activeTarget, setActiveTarget] = useState<ConversationTarget | null>(null);
 
@@ -315,6 +316,16 @@ function MessagesHubView() {
     activeTarget?.type === 'channel'
       ? projects.find((p) => String(p._id) === activeTarget?.id) || null
       : null;
+
+  const canModerateActiveChannel = useMemo(() => {
+    if (!activeProject || !userId) return false;
+    if (activeProject.ownerId === userId) return true;
+    const m = activeProject.members?.find((mem) => mem.userId === userId);
+    return m?.role === 'Admin' || m?.role === 'Moderator';
+  }, [activeProject, userId]);
+
+  const liveTargetOnline =
+    activeTarget?.type === 'dm' ? Boolean(onlineUsers[activeTarget.id]) : false;
 
   return (
     <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm overflow-hidden">
@@ -348,7 +359,7 @@ function MessagesHubView() {
                   <span
                     className={cn(
                       'absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white dark:border-zinc-900',
-                      activeTarget.isOnline ? 'bg-emerald-500' : 'bg-zinc-400'
+                      liveTargetOnline ? 'bg-emerald-500' : 'bg-zinc-400'
                     )}
                   />
                 </div>
@@ -361,27 +372,15 @@ function MessagesHubView() {
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
                   {activeTarget.type === 'channel'
                     ? activeTarget.subtitle || 'Project channel'
-                    : activeTarget.isOnline
+                    : liveTargetOnline
                     ? 'Active now'
                     : 'Offline'}
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 flex-shrink-0">
-              <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-                <Phone className="w-4 h-4" />
-              </button>
-              <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-                <Video className="w-4 h-4" />
-              </button>
-              <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
-                <MoreVertical className="w-4 h-4" />
-              </button>
-            </div>
           </div>
 
-          <ChatStream target={activeTarget} />
+          <ChatStream target={activeTarget} canModerate={canModerateActiveChannel} />
         </div>
       ) : (
         /* Empty state when no conversation selected */
@@ -405,6 +404,75 @@ function MessagesHubView() {
 }
 
 // ─────────────────────────────────────────────
+// Tier 3 Email Lookup resolver
+// ─────────────────────────────────────────────
+function EmailLookupView({ email }: { email: string }) {
+  const router = useRouter();
+  const { getToken } = useAuth();
+  const [status, setStatus] = useState<'loading' | 'not_found' | 'error'>('loading');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    setStatus('loading');
+    (async () => {
+      try {
+        const token = await getToken();
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+        const res = await window.fetch(
+          `${apiBase}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!mounted) return;
+        if (res.ok && body.data?.userId) {
+          router.replace(
+            `/chats?dm=${body.data.userId}&name=${encodeURIComponent(body.data.name || '')}&avatar=${encodeURIComponent(body.data.avatarUrl || '')}`
+          );
+          return;
+        }
+        setErrorMsg(body?.error?.message || `No Synca user found for "${email}".`);
+        setStatus('not_found');
+      } catch {
+        if (!mounted) return;
+        setErrorMsg('Failed to look up user. Please try again.');
+        setStatus('error');
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [email, getToken, router]);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-6rem)] bg-white dark:bg-[#10141e]/65 rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] p-8 text-center gap-4">
+      {status === 'loading' ? (
+        <>
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+          <p className="text-sm text-zinc-500">Looking up {email}…</p>
+        </>
+      ) : (
+        <>
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">User not found</h2>
+            <p className="text-xs text-zinc-500 mt-1 max-w-sm">{errorMsg}</p>
+          </div>
+          <button
+            onClick={() => router.replace('/chats')}
+            className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-xs font-semibold transition-colors"
+          >
+            Back to Messages
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Page router — decides which view to render
 // ─────────────────────────────────────────────
 function ChatsContent() {
@@ -412,6 +480,11 @@ function ChatsContent() {
   const dmParam = searchParams.get('dm');
   const nameParam = searchParams.get('name');
   const avatarParam = searchParams.get('avatar');
+  const emailParam = searchParams.get('email');
+
+  if (emailParam) {
+    return <EmailLookupView email={emailParam} />;
+  }
 
   // Direct DM link from sidebar → full-screen chat, no Hub
   if (dmParam) {

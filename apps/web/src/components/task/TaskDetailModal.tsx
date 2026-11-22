@@ -2,28 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  X,
-  Calendar,
-  CheckSquare,
-  Clock,
-  User,
-  MessageSquare,
-  Send,
-  Edit3,
-  Trash2,
-  Check,
-  Loader2,
-  Shield,
-  Tag,
-  AlertCircle,
-} from 'lucide-react';
-import { Task, TaskPriority, ProjectRole } from '@synca/types';
-import { useAuth, useUser } from '@clerk/nextjs';
-import { addTaskCommentApi, updateTaskApi, deleteTaskApi } from '@/lib/api/task.api';
-import { cn } from '@/lib/utils';
-
-// Re-export Lucide icons cleanly
+import Link from 'next/link';
 import {
   X as CloseIcon,
   Calendar as CalendarIcon,
@@ -37,7 +16,12 @@ import {
   Loader2 as SpinnerIcon,
   Shield as ShieldIcon,
   Tag as TagIcon,
+  AlertCircle,
 } from 'lucide-react';
+import { Task, TaskPriority, ProjectRole } from '@synca/types';
+import { useAuth, useUser } from '@clerk/nextjs';
+import { addTaskCommentApi, updateTaskApi, deleteTaskApi } from '@/lib/api/task.api';
+import { cn } from '@/lib/utils';
 
 interface TaskDetailModalProps {
   isOpen: boolean;
@@ -364,6 +348,7 @@ export function TaskDetailModal({
                   task.assignees.map((assigneeId) => {
                     const m = members.find((mem) => mem.userId === assigneeId);
                     const nameLabel = m?.name || m?.email || `Member (${assigneeId.slice(-4)})`;
+                    const isSelf = assigneeId === currentUserId;
                     return (
                       <span
                         key={assigneeId}
@@ -371,6 +356,16 @@ export function TaskDetailModal({
                       >
                         <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                         <span className="truncate max-w-[150px]">{nameLabel}</span>
+                        {!isSelf && (
+                          <Link
+                            href={`/chats?dm=${assigneeId}&name=${encodeURIComponent(nameLabel)}&avatar=${encodeURIComponent(m?.imageUrl || '')}`}
+                            onClick={onClose}
+                            title={`Message ${nameLabel}`}
+                            className="ml-0.5 text-zinc-400 hover:text-emerald-400 transition-colors"
+                          >
+                            <CommentIcon className="w-3 h-3" />
+                          </Link>
+                        )}
                       </span>
                     );
                   })
@@ -530,7 +525,9 @@ export function TaskDetailModal({
             <span>
               {canEditOrDelete
                 ? 'Admin / Creator Permissions'
-                : 'Assigned Member View (Read & Comment)'}
+                : canInteract
+                ? 'Project Member (Collaborate & Comment)'
+                : 'Read-Only View'}
             </span>
           </div>
 

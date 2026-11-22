@@ -78,10 +78,9 @@ const ProjectSchema = new Schema<IProject>(
       unique: true,
       uppercase: true,
       trim: true,
-      index: true,
     },
     name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    slug: { type: String, required: true, trim: true, lowercase: true },
     description: { type: String, trim: true, default: '' },
     status: {
       type: String,
@@ -114,6 +113,11 @@ const ProjectSchema = new Schema<IProject>(
 
 // Indexes for fast lookup
 ProjectSchema.index({ 'members.userId': 1 });
+ProjectSchema.index({ teamMembers: 1 });
 ProjectSchema.index({ deletedAt: 1, status: 1 });
+ProjectSchema.index(
+  { slug: 1 },
+  { unique: true, partialFilterExpression: { deletedAt: null } }
+);
 
 export const Project = mongoose.model<IProject>('Project', ProjectSchema);

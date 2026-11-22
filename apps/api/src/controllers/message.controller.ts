@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { getAuth, clerkClient } from '@clerk/express';
+import { getAuth } from '@clerk/express';
 import { sendMessageSchema, listMessagesQuerySchema } from '@synca/zod-schemas';
 import { Message } from '../models/Message.js';
+import { getIO } from '../socket/index.js';
+import { fetchUserProfile } from '../utils/clerk-profile.js';
 import {
+  canonicalizeDmChannelId,
   dmChannelId,
   extractPlainText,
   findActiveProject,
@@ -12,28 +15,7 @@ import {
   isProjectMember,
 } from '../utils/membership.js';
 
-const userProfileCache = new Map<string, { name: string; avatar: string; cachedAt: number }>();
-
-export async function getSenderProfile(userId: string): Promise<{ name: string; avatar: string }> {
-  const cached = userProfileCache.get(userId);
-  if (cached && Date.now() - cached.cachedAt < 10 * 60 * 1000) {
-    return { name: cached.name, avatar: cached.avatar };
-  }
-  try {
-    const user = await clerkClient.users.getUser(userId);
-    if (user) {
-      const name = user.firstName
-        ? `${user.firstName} ${user.lastName || ''}`.trim()
-        : user.username || user.emailAddresses?.[0]?.emailAddress?.split('@')[0] || `User ${userId.slice(-4)}`;
-      const avatar = user.imageUrl || '';
-      userProfileCache.set(userId, { name, avatar, cachedAt: Date.now() });
-      return { name, avatar };
-    }
-  } catch (e) {
-    console.warn('[Message] Failed to fetch Clerk profile for:', userId);
-  }
-  return { name: `User ${userId.slice(-4)}`, avatar: '' };
-}
+export const getSenderProfile = fetchUserProfile;
 
 const getUserId = (req: Request): string | undefined => {
   try {
@@ -84,7 +66,6 @@ async function assertCanAccessChannel(
     return { ok: true, projectId: String(project._id) };
   }
 
-  // DM: channelId must be sorted pair including the caller
   if (!isDmParticipant(channelId, userId)) {
     return { ok: false, status: 403, code: 'FORBIDDEN', message: 'You are not a participant in this DM' };
   }
@@ -128,22 +109,30 @@ export const getChannelMessages = async (req: Request, res: Response) => {
     };
 
     if (query.data.cursor && mongoose.Types.ObjectId.isValid(query.data.cursor)) {
-      const cursorMsg = await Message.findById(query.data.cursor).select('createdAt');
+      const cursorMsg = await Message.findOne({
+        _id: query.data.cursor,
+        channelType: 'channel',
+        channelId: projectId,
+      }).select('createdAt _id');
       if (cursorMsg) {
-        filter.createdAt = { $lt: cursorMsg.createdAt };
+        filter.$or = [
+          { createdAt: { $lt: cursorMsg.createdAt } },
+          { createdAt: cursorMsg.createdAt, _id: { $lt: cursorMsg._id } },
+        ];
       }
     }
 
     const messages = await Message.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(query.data.limit)
       .lean();
 
+    const ordered = messages.reverse();
     return res.status(200).json({
       success: true,
       data: {
-        messages: messages.reverse().map(serializeMessage),
-        nextCursor: messages.length === query.data.limit ? String(messages[0]._id) : null,
+        messages: ordered.map(serializeMessage),
+        nextCursor: ordered.length === query.data.limit ? String(ordered[0]._id) : null,
       },
     });
   } catch (err) {
@@ -192,23 +181,31 @@ export const getDmMessages = async (req: Request, res: Response) => {
     };
 
     if (query.data.cursor && mongoose.Types.ObjectId.isValid(query.data.cursor)) {
-      const cursorMsg = await Message.findById(query.data.cursor).select('createdAt');
+      const cursorMsg = await Message.findOne({
+        _id: query.data.cursor,
+        channelType: 'dm',
+        channelId,
+      }).select('createdAt _id');
       if (cursorMsg) {
-        filter.createdAt = { $lt: cursorMsg.createdAt };
+        filter.$or = [
+          { createdAt: { $lt: cursorMsg.createdAt } },
+          { createdAt: cursorMsg.createdAt, _id: { $lt: cursorMsg._id } },
+        ];
       }
     }
 
     const messages = await Message.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(query.data.limit)
       .lean();
 
+    const ordered = messages.reverse();
     return res.status(200).json({
       success: true,
       data: {
         channelId,
-        messages: messages.reverse().map(serializeMessage),
-        nextCursor: messages.length === query.data.limit ? String(messages[0]._id) : null,
+        messages: ordered.map(serializeMessage),
+        nextCursor: ordered.length === query.data.limit ? String(ordered[0]._id) : null,
       },
     });
   } catch (err) {
@@ -245,11 +242,17 @@ export const sendMessage = async (req: Request, res: Response) => {
       });
     }
 
-    let { channelType, channelId, content, attachments, mentions, senderName, senderAvatar } = parsed.data;
+    let { channelType, channelId, content, attachments, mentions } = parsed.data;
 
-    // For DMs, callers may pass the peer userId as channelId — normalize to sorted pair
-    if (channelType === 'dm' && !channelId.includes(':')) {
-      channelId = dmChannelId(userId, channelId);
+    if (channelType === 'dm') {
+      const canonical = canonicalizeDmChannelId(userId, channelId);
+      if (!canonical) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Invalid or unauthorized DM channel' },
+        });
+      }
+      channelId = canonical;
     }
 
     const access = await assertCanAccessChannel(userId, channelType, channelId);
@@ -267,21 +270,16 @@ export const sendMessage = async (req: Request, res: Response) => {
       });
     }
 
-    let finalName = senderName?.trim();
-    let finalAvatar = senderAvatar?.trim();
-    if (!finalName) {
-      const profile = await getSenderProfile(userId);
-      finalName = profile.name;
-      finalAvatar = finalAvatar || profile.avatar;
-    }
+    // Always resolve sender profile server-side to prevent spoofing
+    const profile = await fetchUserProfile(userId);
 
     const message = await Message.create({
       channelType,
       channelId,
       projectId: access.projectId,
       senderId: userId,
-      senderName: finalName,
-      senderAvatar: finalAvatar || '',
+      senderName: profile.name,
+      senderAvatar: profile.avatar,
       content,
       plainText: extractPlainText(content),
       attachments: attachments || [],
@@ -289,9 +287,23 @@ export const sendMessage = async (req: Request, res: Response) => {
       reactions: [],
     });
 
+    const serialized = serializeMessage(message);
+
+    // Emit over Socket.io so live clients receive REST-sent messages immediately
+    const io = getIO();
+    if (io) {
+      if (channelType === 'channel') {
+        io.to(`project:${channelId}`).emit('message:new', serialized);
+      } else {
+        const [a, b] = channelId.split(':');
+        const peerId = a === userId ? b : a;
+        io.to(`dm:${channelId}`).to(`user:${userId}`).to(`user:${peerId}`).emit('message:new', serialized);
+      }
+    }
+
     return res.status(201).json({
       success: true,
-      data: serializeMessage(message),
+      data: serialized,
     });
   } catch (err) {
     console.error('[sendMessage]', err);
@@ -323,20 +335,14 @@ export const deleteMessage = async (req: Request, res: Response) => {
       });
     }
 
-    // Include soft-deleted filter bypass by querying with deletedAt explicitly unset check
-    const message = await Message.findOne({ _id: id, deletedAt: null });
-    if (!message) {
-      // Soft-delete pre-hook filters; try raw
-      const raw = await Message.findOne({ _id: id }).where({ deletedAt: null });
-      if (!raw) {
-        return res.status(404).json({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Message not found' },
-        });
-      }
+    const msg = await Message.findOne({ _id: id, deletedAt: null });
+    if (!msg) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Message not found' },
+      });
     }
 
-    const msg = message!;
     const isSender = msg.senderId === userId;
     let canModerate = false;
 
@@ -354,6 +360,15 @@ export const deleteMessage = async (req: Request, res: Response) => {
 
     msg.deletedAt = new Date();
     await msg.save();
+
+    const io = getIO();
+    if (io) {
+      const room = msg.channelType === 'channel' ? `project:${msg.channelId}` : `dm:${msg.channelId}`;
+      io.to(room).emit('message:deleted', {
+        messageId: String(msg._id),
+        channelId: msg.channelId,
+      });
+    }
 
     return res.status(200).json({
       success: true,

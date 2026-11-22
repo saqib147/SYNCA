@@ -15,7 +15,11 @@ export const createTaskSchema = z.object({
   order: z.number().optional().default(0),
   priority: z.enum(['High', 'Medium', 'Low']).default('Medium'),
   assignees: z.array(z.string()).optional().default([]),
-  dueDate: z.string().optional().nullable(),
+  dueDate: z
+    .string()
+    .refine((val) => !val || !Number.isNaN(Date.parse(val)), { message: 'Invalid due date' })
+    .optional()
+    .nullable(),
   subtasks: z.array(subtaskSchema).optional().default([]),
   isPrivate: z.boolean().default(false),
 });

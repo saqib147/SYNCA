@@ -141,6 +141,22 @@ export async function updateProjectApi(
 }
 
 /**
+ * Add a member directly to a project by exact email or shared-project userId (Admin / Moderator).
+ */
+export async function addProjectMemberApi(
+  projectId: string,
+  payload: { email?: string; userId?: string; role?: 'Admin' | 'Moderator' | 'Member' },
+  token: string
+): Promise<{ userId: string; name: string; avatarUrl: string; role: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/members`, {
+    method: 'POST',
+    headers: getHeaders(token),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<{ userId: string; name: string; avatarUrl: string; role: string }>(res);
+}
+
+/**
  * Update member role in project (Admin only).
  */
 export async function updateMemberRoleApi(

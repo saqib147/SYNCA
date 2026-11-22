@@ -1,12 +1,12 @@
 import { Server, Socket } from 'socket.io';
 import mongoose from 'mongoose';
-import { sendMessageSchema, reactMessageSchema } from '@synca/zod-schemas';
+import { sendMessageSchema, reactMessageSchema, typingEventSchema } from '@synca/zod-schemas';
 import { Message } from '../models/Message.js';
 import { Project } from '../models/Project.js';
 import { redisClient } from '../lib/redis.js';
-import { getSenderProfile } from '../controllers/message.controller.js';
+import { fetchUserProfile, fetchUserProfilesBatch } from '../utils/clerk-profile.js';
 import {
-  dmChannelId,
+  canonicalizeDmChannelId,
   extractPlainText,
   findActiveProject,
   isDmParticipant,
@@ -67,15 +67,25 @@ async function assertAccess(userId: string, channelType: 'dm' | 'channel', chann
 }
 
 function emitRoom(io: Server, channelType: 'dm' | 'channel', channelId: string, event: string, payload: unknown) {
-  const room = channelType === 'channel' ? projectRoom(channelId) : dmRoom(channelId);
-  io.to(room).emit(event, payload);
+  if (channelType === 'channel') {
+    io.to(projectRoom(channelId)).emit(event, payload);
+    return;
+  }
+  const [a, b] = channelId.split(':');
+  let target = io.to(dmRoom(channelId));
+  if (a) target = target.to(userRoom(a));
+  if (b) target = target.to(userRoom(b));
+  target.emit(event, payload);
 }
 
 export function registerSocketHandlers(io: Server, socket: Socket) {
   const userId: string = socket.data.userId;
   socket.join(userRoom(userId));
 
-  // Automatically join all project rooms the user is a member of so they receive real-time notifications on any page
+  // Track joined project rooms on this socket so presence broadcasts are scoped to collaborators
+  let joinedProjectIds: string[] = [];
+
+  // Auto-join all active project rooms and emit scoped online presence
   void (async () => {
     try {
       const userProjects = await Project.find({
@@ -85,30 +95,47 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         .select('_id')
         .lean();
 
-      for (const p of userProjects) {
-        await socket.join(projectRoom(String(p._id)));
+      joinedProjectIds = userProjects.map((p) => String(p._id));
+      for (const pid of joinedProjectIds) {
+        await socket.join(projectRoom(pid));
+      }
+
+      if (redisClient.isOpen) {
+        await redisClient.set(
+          `presence:${userId}`,
+          JSON.stringify({ status: 'online', lastSeen: Date.now() }),
+          { EX: 300 }
+        );
+      }
+
+      // Broadcast online status only to shared project rooms (not globally)
+      // AND send an initial presence:sync snapshot of collaborators already online
+      if (joinedProjectIds.length > 0) {
+        let target = socket.to(projectRoom(joinedProjectIds[0]));
+        for (let i = 1; i < joinedProjectIds.length; i++) {
+          target = target.to(projectRoom(joinedProjectIds[i]));
+        }
+        target.emit('presence:update', {
+          userId,
+          status: 'online',
+          lastSeen: new Date(),
+        });
+
+        const onlineSet = new Set<string>();
+        const roomSocketLists = await Promise.all(
+          joinedProjectIds.map((pid) => io.in(projectRoom(pid)).fetchSockets())
+        );
+        for (const list of roomSocketLists) {
+          for (const s of list) {
+            const uid = s.data?.userId;
+            if (uid && uid !== userId) onlineSet.add(uid);
+          }
+        }
+        socket.emit('presence:sync', { onlineUserIds: Array.from(onlineSet) });
       }
     } catch (e) {
-      console.warn('[Socket] Auto-join project rooms error:', e);
+      console.warn('[Socket] Auto-join/presence error:', e);
     }
-  })();
-
-  // Presence online
-  void (async () => {
-    try {
-      if (redisClient.isOpen) {
-        await redisClient.set(`presence:${userId}`, JSON.stringify({ status: 'online', lastSeen: Date.now() }), {
-          EX: 60,
-        });
-      }
-    } catch {
-      /* ignore presence failures */
-    }
-    socket.broadcast.emit('presence:update', {
-      userId,
-      status: 'online',
-      lastSeen: new Date(),
-    });
   })();
 
   socket.on('project:join', async (payload: { projectId: string }) => {
@@ -120,6 +147,9 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         return;
       }
       await socket.join(projectRoom(projectId));
+      if (!joinedProjectIds.includes(projectId)) {
+        joinedProjectIds.push(projectId);
+      }
     } catch (err) {
       console.error('[project:join]', err);
       socket.emit('error', { code: 'INTERNAL_ERROR', message: 'Failed to join project' });
@@ -129,14 +159,14 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
   socket.on('project:leave', async (payload: { projectId: string }) => {
     if (payload?.projectId) {
       await socket.leave(projectRoom(payload.projectId));
+      joinedProjectIds = joinedProjectIds.filter((id) => id !== payload.projectId);
     }
   });
 
   socket.on('dm:join', async (payload: { targetUserId: string }) => {
     try {
-      const targetUserId = payload?.targetUserId;
-      if (!targetUserId) return;
-      const channelId = dmChannelId(userId, targetUserId);
+      const channelId = canonicalizeDmChannelId(userId, payload?.targetUserId || '');
+      if (!channelId) return;
       await socket.join(dmRoom(channelId));
     } catch (err) {
       console.error('[dm:join]', err);
@@ -145,55 +175,57 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
   socket.on('dm:leave', async (payload: { targetUserId: string }) => {
     try {
-      const targetUserId = payload?.targetUserId;
-      if (!targetUserId) return;
-      const channelId = dmChannelId(userId, targetUserId);
+      const channelId = canonicalizeDmChannelId(userId, payload?.targetUserId || '');
+      if (!channelId) return;
       await socket.leave(dmRoom(channelId));
     } catch (err) {
       console.error('[dm:leave]', err);
     }
   });
 
-  socket.on('message:send', async (payload) => {
+  socket.on('message:send', async (payload, ack?: (res: { ok: boolean; error?: string }) => void) => {
     try {
       const parsed = sendMessageSchema.safeParse(payload);
       if (!parsed.success) {
         socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Invalid message payload' });
+        ack?.({ ok: false, error: 'Invalid message payload' });
         return;
       }
 
-      let { channelType, channelId, content, attachments, mentions, senderName, senderAvatar } = parsed.data;
-      if (channelType === 'dm' && !channelId.includes(':')) {
-        channelId = dmChannelId(userId, channelId);
+      let { channelType, channelId, content, attachments, mentions } = parsed.data;
+      if (channelType === 'dm') {
+        const canonical = canonicalizeDmChannelId(userId, channelId);
+        if (!canonical) {
+          socket.emit('error', { code: 'FORBIDDEN', message: 'Invalid or unauthorized DM channel' });
+          ack?.({ ok: false, error: 'Invalid or unauthorized DM channel' });
+          return;
+        }
+        channelId = canonical;
       }
 
       const access = await assertAccess(userId, channelType, channelId);
       if (!access.ok) {
         socket.emit('error', { code: 'FORBIDDEN', message: access.message });
+        ack?.({ ok: false, error: access.message });
         return;
       }
 
       if (content === undefined || content === null || content === '') {
         socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Message content is required' });
+        ack?.({ ok: false, error: 'Message content is required' });
         return;
       }
 
-      // Use client-provided authenticated profile if present, fallback to Clerk API cache
-      let finalName = senderName?.trim();
-      let finalAvatar = senderAvatar?.trim();
-      if (!finalName) {
-        const profile = await getSenderProfile(userId);
-        finalName = profile.name;
-        finalAvatar = finalAvatar || profile.avatar;
-      }
+      // Always resolve sender profile server-side to prevent spoofing
+      const profile = await fetchUserProfile(userId);
 
       const message = await Message.create({
         channelType,
         channelId,
         projectId: access.projectId,
         senderId: userId,
-        senderName: finalName,
-        senderAvatar: finalAvatar || '',
+        senderName: profile.name,
+        senderAvatar: profile.avatar,
         content,
         plainText: extractPlainText(content),
         attachments: attachments || [],
@@ -203,7 +235,6 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
       const serialized = serializeMessage(message);
 
-      // Broadcast with Socket.io automatic room deduplication
       if (channelType === 'channel') {
         let broadcastTarget = io.to(projectRoom(channelId));
         const project = await findActiveProject(channelId);
@@ -223,7 +254,6 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         broadcastTarget.emit('message:new', serialized);
       }
 
-      // DM peer & sender notification across all their active tabs/rooms
       if (channelType === 'dm') {
         const [a, b] = channelId.split(':');
         const peerId = a === userId ? b : a;
@@ -232,16 +262,19 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
           .to(userRoom(peerId))
           .emit('message:new', serialized);
       }
+
+      ack?.({ ok: true });
     } catch (err) {
       console.error('[message:send]', err);
       socket.emit('error', { code: 'INTERNAL_ERROR', message: 'Failed to send message' });
+      ack?.({ ok: false, error: 'Failed to send message' });
     }
   });
 
   socket.on('message:react', async (payload) => {
     try {
       const parsed = reactMessageSchema.safeParse(payload);
-      if (!parsed.success) {
+      if (!parsed.success || !mongoose.Types.ObjectId.isValid(parsed.data.messageId)) {
         socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Invalid reaction payload' });
         return;
       }
@@ -284,7 +317,12 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
   socket.on('message:delete', async (payload: { messageId: string }) => {
     try {
-      const message = await Message.findById(payload?.messageId);
+      if (!payload?.messageId || !mongoose.Types.ObjectId.isValid(payload.messageId)) {
+        socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Invalid message ID' });
+        return;
+      }
+
+      const message = await Message.findById(payload.messageId);
       if (!message) {
         socket.emit('error', { code: 'NOT_FOUND', message: 'Message not found' });
         return;
@@ -317,49 +355,66 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
   const typingKey = (channelType: string, channelId: string) => `typing:${channelType}:${channelId}`;
 
-  socket.on('typing:start', async (payload: { channelType: 'dm' | 'channel'; channelId: string }) => {
+  async function emitTypingUpdate(channelType: 'dm' | 'channel', channelId: string, userIds: string[]) {
+    const profiles = await fetchUserProfilesBatch(userIds);
+    emitRoom(io, channelType, channelId, 'typing:update', {
+      channelId,
+      typingUsers: userIds.map((id) => ({
+        userId: id,
+        name: profiles.get(id)?.name || `User ${id.slice(-4)}`,
+      })),
+    });
+  }
+
+  socket.on('typing:start', async (payload) => {
     try {
-      let channelId = payload.channelId;
-      if (payload.channelType === 'dm' && !channelId.includes(':')) {
-        channelId = dmChannelId(userId, channelId);
+      const parsed = typingEventSchema.safeParse(payload);
+      if (!parsed.success) return;
+
+      let { channelType, channelId } = parsed.data;
+      if (channelType === 'dm') {
+        const canonical = canonicalizeDmChannelId(userId, channelId);
+        if (!canonical) return;
+        channelId = canonical;
       }
-      const access = await assertAccess(userId, payload.channelType, channelId);
+      const access = await assertAccess(userId, channelType, channelId);
       if (!access.ok) return;
 
-      const key = typingKey(payload.channelType, channelId);
+      const key = typingKey(channelType, channelId);
       if (redisClient.isOpen) {
         await redisClient.sAdd(key, userId);
         await redisClient.expire(key, 5);
         const userIds = await redisClient.sMembers(key);
-        emitRoom(io, payload.channelType, channelId, 'typing:update', {
-          channelId,
-          typingUsers: userIds.map((id) => ({ userId: id, name: id === userId ? 'You' : 'Member' })),
-        });
+        await emitTypingUpdate(channelType, channelId, userIds);
       } else {
-        emitRoom(io, payload.channelType, channelId, 'typing:update', {
-          channelId,
-          typingUsers: [{ userId, name: 'Member' }],
-        });
+        await emitTypingUpdate(channelType, channelId, [userId]);
       }
     } catch (err) {
       console.error('[typing:start]', err);
     }
   });
 
-  socket.on('typing:stop', async (payload: { channelType: 'dm' | 'channel'; channelId: string }) => {
+  socket.on('typing:stop', async (payload) => {
     try {
-      let channelId = payload.channelId;
-      if (payload.channelType === 'dm' && !channelId.includes(':')) {
-        channelId = dmChannelId(userId, channelId);
+      const parsed = typingEventSchema.safeParse(payload);
+      if (!parsed.success) return;
+
+      let { channelType, channelId } = parsed.data;
+      if (channelType === 'dm') {
+        const canonical = canonicalizeDmChannelId(userId, channelId);
+        if (!canonical) return;
+        channelId = canonical;
       }
-      const key = typingKey(payload.channelType, channelId);
+      const access = await assertAccess(userId, channelType, channelId);
+      if (!access.ok) return;
+
+      const key = typingKey(channelType, channelId);
       if (redisClient.isOpen) {
         await redisClient.sRem(key, userId);
         const userIds = await redisClient.sMembers(key);
-        emitRoom(io, payload.channelType, channelId, 'typing:update', {
-          channelId,
-          typingUsers: userIds.map((id) => ({ userId: id, name: 'Member' })),
-        });
+        await emitTypingUpdate(channelType, channelId, userIds);
+      } else {
+        await emitTypingUpdate(channelType, channelId, []);
       }
     } catch (err) {
       console.error('[typing:stop]', err);
@@ -369,6 +424,10 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
   socket.on('disconnect', () => {
     void (async () => {
       try {
+        // Only mark user offline if they have no other open tabs/sockets
+        const remaining = await io.in(userRoom(userId)).fetchSockets();
+        if (remaining.length > 0) return;
+
         if (redisClient.isOpen) {
           await redisClient.set(
             `presence:${userId}`,
@@ -376,14 +435,21 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
             { EX: 86400 }
           );
         }
+
+        if (joinedProjectIds.length > 0) {
+          let target = io.to(projectRoom(joinedProjectIds[0]));
+          for (let i = 1; i < joinedProjectIds.length; i++) {
+            target = target.to(projectRoom(joinedProjectIds[i]));
+          }
+          target.emit('presence:update', {
+            userId,
+            status: 'offline',
+            lastSeen: new Date(),
+          });
+        }
       } catch {
         /* ignore */
       }
-      socket.broadcast.emit('presence:update', {
-        userId,
-        status: 'offline',
-        lastSeen: new Date(),
-      });
     })();
   });
 }

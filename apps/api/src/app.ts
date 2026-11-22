@@ -1,10 +1,10 @@
 import './loadEnv.js';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import multer from 'multer';
 import mongoose from 'mongoose';
 import { clerkMiddleware } from '@clerk/express';
-import { requireAuth } from './middleware/auth.middleware.js';
 import { redisClient } from './lib/redis.js';
 import fileRouter from './routes/file.routes.js';
 import projectRouter from './routes/project.routes.js';
@@ -60,13 +60,27 @@ export const createApp = () => {
     });
   });
 
-  // Protected route for testing / verifying authorization middleware
-  app.get('/api/v1/protected-test', requireAuth, (req, res) => {
-    res.status(200).json({
-      success: true,
-      data: {
-        message: 'You have accessed the protected route!',
-        userId: (req as any).auth.userId,
+  // Global error handler (handles Multer errors & unexpected exceptions cleanly as JSON)
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof multer.MulterError) {
+      const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({
+        success: false,
+        error: {
+          code: err.code,
+          message:
+            err.code === 'LIMIT_FILE_SIZE'
+              ? 'File exceeds maximum allowed size limit'
+              : err.message,
+        },
+      });
+    }
+    console.error('[Synca API] Unhandled error:', err);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'An unexpected server error occurred',
       },
     });
   });

@@ -53,7 +53,7 @@ export const connectRedis = async () => {
 };
 
 // Graceful shutdown helper
-const gracefulShutdown = async () => {
+export const closeRedis = async () => {
   if (redisClient.isOpen) {
     try {
       await redisClient.quit();
@@ -63,7 +63,3 @@ const gracefulShutdown = async () => {
     }
   }
 };
-
-// Listen for termination signals to close resources
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);

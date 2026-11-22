@@ -402,6 +402,24 @@ export function TaskModal({
             </div>
           </div>
 
+          {/* Private Task Visibility Toggle */}
+          {projectId && (
+            <label className="flex items-center justify-between p-3 rounded-xl bg-[#1b1f26] border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
+              <div>
+                <p className="text-xs font-semibold text-zinc-200">Private Task</p>
+                <p className="text-[11px] text-zinc-500">
+                  Only visible to you, assignees, and project Admins/Moderators
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                className="w-4 h-4 accent-[#d8f870] rounded cursor-pointer"
+              />
+            </label>
+          )}
+
           {/* Modal Actions */}
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800">
             <button
