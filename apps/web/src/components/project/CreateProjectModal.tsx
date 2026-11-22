@@ -52,8 +52,8 @@ const STATUS_CHOICES: {
     value: 'OnTrack',
     label: 'On Track',
     activeClass:
-      'bg-[#ddec6b] border-[#5a6400] text-[#606a00]',
-    dotClass: 'bg-[#5a6400]',
+      'bg-[#ddec6b] dark:bg-[#F0FF7C]/15 border-[#5a6400] dark:border-[#F0FF7C]/40 text-[#606a00] dark:text-[#F0FF7C]',
+    dotClass: 'bg-[#5a6400] dark:bg-[#F0FF7C]',
   },
   {
     value: 'AtRisk',
@@ -452,7 +452,7 @@ export function CreateProjectModal({
                     type="button"
                     onClick={handleAddGoal}
                     disabled={!goalInput.trim()}
-                    className="h-[40px] px-3.5 rounded-[8px] bg-[#e6f7f1] dark:bg-[#006c52]/25 hover:bg-[#d3f2e7] text-[#006c52] dark:text-[#79deba] text-[13px] font-medium inline-flex items-center gap-1 disabled:opacity-40 transition-colors cursor-pointer"
+                    className="h-[40px] px-3.5 rounded-[8px] bg-[#e6f7f1] dark:bg-[#66deb4]/15 hover:bg-[#d3f5e8] dark:hover:bg-[#66deb4]/25 text-[#006c52] dark:text-[#66deb4] text-[13px] font-medium inline-flex items-center gap-1 disabled:opacity-40 transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add</span>
@@ -472,7 +472,7 @@ export function CreateProjectModal({
                         <button
                           type="button"
                           onClick={() => handleRemoveGoal(idx)}
-                          className="text-[#3e4944] hover:text-[#ba1a1a] transition-colors cursor-pointer"
+                          className="text-[#3e4944] dark:text-zinc-400 hover:text-[#ba1a1a] dark:hover:text-rose-400 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -552,7 +552,7 @@ export function CreateProjectModal({
               <button
                 type="submit"
                 disabled={isSubmitting || !name.trim()}
-                className="px-5 py-2.5 text-[13px] font-semibold rounded-[8px] bg-[#006c52] hover:bg-[#005943] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="px-5 py-2.5 text-[13px] font-semibold rounded-[8px] bg-[#006c52] hover:bg-[#005742] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 {isSubmitting ? (
                   <>

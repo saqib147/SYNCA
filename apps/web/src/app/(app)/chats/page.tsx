@@ -4,34 +4,39 @@ import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
 import {
-  Hash,
   MessageSquare,
   Loader2,
-  ArrowLeft,
-  Users,
   AlertCircle,
+  Search,
+  PanelRight,
+  X,
+  Plus,
+  Trash2,
 } from 'lucide-react';
-import { useProjects } from '@/hooks/useProjects';
-import { useTeammates } from '@/hooks/useTeammates';
+import { useTeammates, upsertDmPeerLocally } from '@/hooks/useTeammates';
 import { useSocket } from '@/context/SocketContext';
 import { useChatNotifications } from '@/context/ChatNotificationContext';
 import { useChat } from '@/hooks/useChat';
-import { ChatSidebar, ConversationTarget } from '@/components/chat/ChatSidebar';
+import { ConversationTarget } from '@/components/chat/ChatSidebar';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ContactProfileDrawer } from '@/components/chat/ContactProfileDrawer';
+import { NewMessageModal } from '@/components/chat/NewMessageModal';
 import { groupMessages } from '@/lib/chatUtils';
+import { Message } from '@synca/types';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────
-// Shared chat stream (used in both modes)
+// DM Chat Stream
 // ─────────────────────────────────────────────
 function ChatStream({
   target,
-  canModerate = false,
+  searchQuery = '',
+  onMessagesLoaded,
 }: {
   target: ConversationTarget;
-  canModerate?: boolean;
+  searchQuery?: string;
+  onMessagesLoaded?: (msgs: Message[]) => void;
 }) {
   const { userId } = useAuth();
   const { user } = useUser();
@@ -49,19 +54,22 @@ function ChatStream({
     deleteMessage,
     typingUsers,
     setTyping,
-  } = useChat({ channelType: target.type, channelId: target.id });
+  } = useChat({ channelType: 'dm', channelId: target.id });
 
   const { setActiveChatKey, markAsRead } = useChatNotifications();
 
   useEffect(() => {
     lastMessageIdRef.current = null;
-    const key = target.type === 'channel' ? `channel_${target.id}` : `dm_${target.id}`;
+    const key = `dm_${target.id}`;
     setActiveChatKey(key);
     markAsRead(key);
     return () => setActiveChatKey(null);
-  }, [target.id, target.type, setActiveChatKey, markAsRead]);
+  }, [target.id, setActiveChatKey, markAsRead]);
 
-  // Only auto-scroll when the newest (bottom) message changes — never when prepending older messages
+  useEffect(() => {
+    onMessagesLoaded?.(messages);
+  }, [messages, onMessagesLoaded]);
+
   useEffect(() => {
     const newest = messages[messages.length - 1];
     const newestId = newest ? String(newest._id || newest.id) : null;
@@ -71,18 +79,32 @@ function ChatStream({
     }
   }, [messages]);
 
-  const groupedList = useMemo(() => groupMessages(messages, userId || undefined), [messages, userId]);
+  const visibleMessages = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => {
+      const text = (
+        m.plainText || (typeof m.content === 'string' ? m.content : '')
+      ).toLowerCase();
+      return text.includes(q);
+    });
+  }, [messages, searchQuery]);
+
+  const groupedList = useMemo(
+    () => groupMessages(visibleMessages, userId || undefined),
+    [visibleMessages, userId]
+  );
 
   return (
     <>
-      {/* Message Stream */}
-      <div className="flex-1 px-6 py-4 overflow-y-auto space-y-1 scrollbar-thin">
-        {hasMore && (
-          <div className="flex justify-center pb-2">
+      <div className="flex-1 px-6 sm:px-8 py-5 overflow-y-auto space-y-1 scrollbar-thin">
+        {hasMore && !searchQuery && (
+          <div className="flex justify-center pb-3">
             <button
+              type="button"
               onClick={loadMoreMessages}
               disabled={isLoadingMore}
-              className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-medium transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-full bg-[#f8f9fa] dark:bg-white/[0.06] hover:bg-[#e7e8e9] dark:hover:bg-white/[0.1] text-[#3e4944] dark:text-zinc-300 text-[12px] font-medium border border-[#e5e7eb] dark:border-white/[0.08] transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               {isLoadingMore && <Loader2 className="w-3 h-3 animate-spin" />}
               <span>Load older messages</span>
@@ -91,21 +113,23 @@ function ChatStream({
         )}
 
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-48 space-y-2 text-zinc-400">
-            <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
-            <p className="text-xs">Loading conversation…</p>
+          <div className="flex flex-col items-center justify-center h-56 space-y-2.5 text-[#3e4944] dark:text-zinc-400">
+            <Loader2 className="w-6 h-6 animate-spin text-[#006c52] dark:text-[#66deb4]" />
+            <p className="text-[13px]">Loading conversation…</p>
           </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center space-y-3 text-zinc-400">
-            <div className="w-14 h-14 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-              <MessageSquare className="w-7 h-7 text-zinc-400" />
+        ) : visibleMessages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-72 text-center space-y-3">
+            <div className="size-14 rounded-[16px] bg-[#eefaf5] dark:bg-[#006c52]/20 border border-[#79deba]/50 flex items-center justify-center text-[#006c52] dark:text-[#66deb4]">
+              <MessageSquare className="w-7 h-7" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">No messages yet</p>
-              <p className="text-xs text-zinc-400 mt-1 max-w-xs">
-                {target.type === 'dm'
-                  ? `Send ${target.name} a message to start the conversation.`
-                  : 'Be the first to send a message in this channel.'}
+              <p className="font-['Funnel_Display',sans-serif] text-[18px] font-medium text-[#191c1d] dark:text-white">
+                {searchQuery ? 'No matching messages' : 'Say hello!'}
+              </p>
+              <p className="text-[13px] text-[#3e4944] dark:text-zinc-400 mt-1 max-w-xs">
+                {searchQuery
+                  ? 'Try another keyword or clear the search bar.'
+                  : `Send ${target.name} a message to start your 1:1 conversation.`}
               </p>
             </div>
           </div>
@@ -115,14 +139,16 @@ function ChatStream({
             const isOwn = item.isOwn;
             const senderDisplayName = isOwn
               ? 'You'
-              : msg.senderName || (target.type === 'dm' ? target.name : `User ${msg.senderId.slice(-4)}`);
-            const senderAvatar = isOwn ? user?.imageUrl : msg.senderAvatar || target.avatarUrl;
+              : msg.senderName || target.name;
+            const senderAvatar = isOwn
+              ? user?.imageUrl
+              : msg.senderAvatar || target.avatarUrl;
 
             return (
               <React.Fragment key={msg._id || msg.id}>
                 {item.showDateDivider && (
-                  <div className="flex items-center justify-center my-3">
-                    <span className="px-3 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 border border-zinc-200/80 dark:border-white/[0.08]">
+                  <div className="flex items-center justify-center my-5">
+                    <span className="px-3.5 py-1 rounded-full bg-[#f1f3f4] dark:bg-white/[0.07] text-[11.5px] font-medium text-[#3e4944] dark:text-zinc-400">
                       {item.dateLabel}
                     </span>
                   </div>
@@ -134,38 +160,64 @@ function ChatStream({
                   senderAvatar={senderAvatar}
                   isFirstInGroup={item.isFirstInGroup}
                   isLastInGroup={item.isLastInGroup}
-                  onReact={(emoji) => reactToMessage(msg._id || msg.id || '', emoji)}
+                  onReact={(emoji) =>
+                    reactToMessage(msg._id || msg.id || '', emoji)
+                  }
                   onDelete={() => deleteMessage(msg._id || msg.id || '')}
-                  canDelete={isOwn || (target.type === 'channel' && canModerate)}
+                  canDelete={isOwn}
+                  variant="dm"
                 />
               </React.Fragment>
             );
           })
         )}
 
+        {/* Animated 3-dot Typing Indicator Bubble (Figma 86:330) */}
         {typingUsers.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500 italic pl-11 pt-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{typingUsers.map((u) => u.name || 'Someone').join(', ')} is typing…</span>
+          <div className="flex items-end gap-2.5 mt-4">
+            <div className="size-8 rounded-full bg-[#e7e8e9] dark:bg-zinc-700 flex items-center justify-center text-xs font-semibold text-[#191c1d] dark:text-zinc-200 overflow-hidden shrink-0">
+              {target.avatarUrl ? (
+                <img
+                  src={target.avatarUrl}
+                  alt={target.name}
+                  className="size-full object-cover"
+                />
+              ) : (
+                (typingUsers[0]?.name || target.name).charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="px-4 py-3 rounded-[14px] rounded-bl-[4px] bg-[#f1f3f4] dark:bg-[#1e2127] inline-flex items-center gap-1">
+              <span className="size-1.5 rounded-full bg-[#3e4944]/50 dark:bg-zinc-400 animate-bounce [animation-delay:-0.3s]" />
+              <span className="size-1.5 rounded-full bg-[#3e4944]/50 dark:bg-zinc-400 animate-bounce [animation-delay:-0.15s]" />
+              <span className="size-1.5 rounded-full bg-[#3e4944]/50 dark:bg-zinc-400 animate-bounce" />
+            </div>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <ChatInput
-        onSend={sendMessage}
+        onSend={async (content, attachments) => {
+          upsertDmPeerLocally(userId, {
+            userId: target.id,
+            name: target.name,
+            avatarUrl: target.avatarUrl,
+            lastMessagePreview: content || (attachments.length > 0 ? 'Attachment' : ''),
+            lastMessageAt: new Date().toISOString(),
+          });
+          await sendMessage(content, attachments);
+        }}
         onTyping={setTyping}
-        placeholder={`Message ${target.name}…`}
-        projectId={target.type === 'channel' ? target.id : undefined}
+        placeholder={`Message ${target.name}...`}
+        variant="dm"
       />
     </>
   );
 }
 
 // ─────────────────────────────────────────────
-// DM mode — full-width, no Hub sidebar
+// Direct DM View — Figma 86:330 & 86:890 (No duplicate sidebar!)
 // ─────────────────────────────────────────────
 function DirectChatView({
   peerId,
@@ -179,18 +231,25 @@ function DirectChatView({
   const router = useRouter();
   const { getToken } = useAuth();
   const { onlineUsers } = useSocket();
-  const { teammates } = useTeammates();
+  const { teammates, deleteConversation } = useTeammates();
   const isOnline = Boolean(onlineUsers[peerId]);
 
-  // Teammate lookup from cache
-  const peerTeammate = teammates.find((t) => t.userId === peerId);
+  const [showProfile, setShowProfile] = useState(true);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [liveMessages, setLiveMessages] = useState<Message[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Profile state for direct / fetched resolution
-  const [profile, setProfile] = useState<{ name: string; avatarUrl: string } | null>(null);
+  const peerTeammate = teammates.find((t) => t.userId === peerId);
+  const [profile, setProfile] = useState<{
+    name: string;
+    avatarUrl: string;
+  } | null>(null);
 
   useEffect(() => {
     setProfile(null);
-    if (peerTeammate?.name) return; // already resolved
+    setSearchQuery('');
+    if (peerTeammate?.name || (peerName && peerName !== 'Teammate')) return;
     let mounted = true;
     (async () => {
       try {
@@ -202,7 +261,10 @@ function DirectChatView({
         if (res.ok) {
           const body = await res.json();
           if (mounted && body.data) {
-            setProfile({ name: body.data.name, avatarUrl: body.data.avatarUrl });
+            setProfile({
+              name: body.data.name,
+              avatarUrl: body.data.avatarUrl,
+            });
           }
         }
       } catch (err) {
@@ -221,10 +283,7 @@ function DirectChatView({
     'Direct Message';
 
   const resolvedAvatar =
-    peerTeammate?.avatarUrl ||
-    profile?.avatarUrl ||
-    peerAvatar ||
-    undefined;
+    peerTeammate?.avatarUrl || profile?.avatarUrl || peerAvatar || undefined;
 
   const target: ConversationTarget = {
     type: 'dm',
@@ -235,181 +294,204 @@ function DirectChatView({
     isOnline,
   };
 
-  return (
-    <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm overflow-hidden">
-      {/* Main chat column */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="h-16 px-4 border-b border-zinc-200/80 dark:border-white/[0.08] flex items-center justify-between bg-white/60 dark:bg-white/[0.02] backdrop-blur-md flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Back button */}
-            <button
-              onClick={() => router.back()}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex-shrink-0"
-              title="Back"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
+  const handleDeleteCurrentDm = async () => {
+    if (
+      !window.confirm(
+        `Delete conversation with ${resolvedName}? All messages in this DM will be removed.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteConversation(peerId);
+      router.replace('/chats');
+    } catch (err) {
+      console.error('[DirectChatView] Failed to delete conversation:', err);
+    }
+  };
 
-            {/* Avatar */}
-            <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden">
-                {target.avatarUrl ? (
-                  <img src={target.avatarUrl} alt={target.name} className="w-full h-full object-cover" />
-                ) : (
-                  target.name.charAt(0).toUpperCase()
-                )}
-              </div>
+  const openSearch = () => {
+    setShowSearch(true);
+    setTimeout(() => searchInputRef.current?.focus(), 40);
+  };
+
+  return (
+    <div className="flex gap-4 h-full min-h-0">
+      {/* Main Chat Card (Figma 86:330) */}
+      <div className="flex-1 flex flex-col min-w-0 rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] overflow-hidden">
+        {/* Header */}
+        <div className="h-[64px] px-6 border-b border-[#e5e7eb] dark:border-white/[0.08] flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <h2 className="font-['Funnel_Display',sans-serif] font-medium text-[20px] text-[#191c1d] dark:text-white truncate">
+              {target.name}
+            </h2>
+            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#3e4944] dark:text-zinc-400">
               <span
                 className={cn(
-                  'absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#10141e]',
-                  isOnline ? 'bg-emerald-500' : 'bg-zinc-400'
+                  'size-2 rounded-full',
+                  isOnline ? 'bg-[#66deb4]' : 'bg-zinc-400'
                 )}
               />
-            </div>
+              <span>{isOnline ? 'Online' : 'Offline'}</span>
+            </span>
+          </div>
 
-            {/* Name & status */}
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{target.name}</h2>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {isOnline ? 'Active now' : 'Offline'}
-              </p>
-            </div>
+          {/* Right Header Controls */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {showSearch ? (
+              <div className="relative flex items-center">
+                <Search className="w-3.5 h-3.5 text-[#3e4944] dark:text-zinc-400 absolute left-3 pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search messages..."
+                  className="w-44 sm:w-56 h-[34px] pl-8 pr-7 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#bdc9c2] dark:border-white/[0.12] text-[12.5px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52] dark:focus:border-[#66deb4]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setShowSearch(false);
+                  }}
+                  className="absolute right-2 p-0.5 text-[#3e4944] hover:text-[#191c1d] dark:text-zinc-400 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openSearch}
+                title="Search in conversation"
+                className="p-2 rounded-[8px] text-[#3e4944] dark:text-zinc-400 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.08] hover:text-[#191c1d] dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDeleteCurrentDm}
+              title="Delete conversation"
+              className="p-2 rounded-[8px] text-[#3e4944] dark:text-zinc-400 hover:bg-[#ffdad6]/60 dark:hover:bg-rose-500/15 hover:text-[#ba1a1a] dark:hover:text-rose-400 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowProfile((v) => !v)}
+              title={showProfile ? 'Hide profile' : 'Show profile'}
+              className={cn(
+                'p-2 rounded-[8px] transition-colors cursor-pointer',
+                showProfile
+                  ? 'bg-[#eefaf5] dark:bg-[#006c52]/25 text-[#006c52] dark:text-[#66deb4]'
+                  : 'text-[#3e4944] dark:text-zinc-400 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.08]'
+              )}
+            >
+              <PanelRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
         {/* Stream + Input */}
-        <ChatStream target={target} />
+        <ChatStream
+          target={target}
+          searchQuery={searchQuery}
+          onMessagesLoaded={setLiveMessages}
+        />
       </div>
 
-      {/* Right: Contact profile panel */}
-      <ContactProfileDrawer target={target} />
+      {/* Detached Right Profile Card (Figma 86:890) */}
+      {showProfile && (
+        <div className="hidden xl:block">
+          <ContactProfileDrawer
+            target={target}
+            sharedProjects={peerTeammate?.sharedProjects || []}
+            messages={liveMessages}
+            onSearchClick={openSearch}
+            onDeleteConversation={handleDeleteCurrentDm}
+            onClose={() => setShowProfile(false)}
+            detached
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────
-// Hub mode — Messages Hub with full ChatSidebar
+// Empty / Default Landing View when /chats has no ?dm=
+// Auto-opens most recent conversation if one exists, otherwise shows onboarding CTA
 // ─────────────────────────────────────────────
-function MessagesHubView() {
-  const { userId } = useAuth();
-  const { projects, isLoading: isProjectsLoading } = useProjects();
-  const { onlineUsers } = useSocket();
+function EmptyChatsView() {
+  const { teammates, isLoading } = useTeammates();
+  const [showNewMessage, setShowNewMessage] = useState(false);
 
-  const [activeTarget, setActiveTarget] = useState<ConversationTarget | null>(null);
+  if (isLoading && teammates.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] gap-2.5 text-[#3e4944] dark:text-zinc-400">
+        <Loader2 className="w-6 h-6 animate-spin text-[#006c52] dark:text-[#66deb4]" />
+        <p className="text-[13px]">Loading conversations…</p>
+      </div>
+    );
+  }
 
-  // Default to first project channel on load
-  useEffect(() => {
-    if (activeTarget) return;
-    if (projects.length > 0) {
-      const firstProj = projects[0];
-      setActiveTarget({
-        type: 'channel',
-        id: String(firstProj._id),
-        name: `${firstProj.name} — #general`,
-        subtitle: firstProj.description || 'Project Channel',
-      });
-    }
-  }, [projects, isProjectsLoading, activeTarget]);
-
-  const activeProject =
-    activeTarget?.type === 'channel'
-      ? projects.find((p) => String(p._id) === activeTarget?.id) || null
-      : null;
-
-  const canModerateActiveChannel = useMemo(() => {
-    if (!activeProject || !userId) return false;
-    if (activeProject.ownerId === userId) return true;
-    const m = activeProject.members?.find((mem) => mem.userId === userId);
-    return m?.role === 'Admin' || m?.role === 'Moderator';
-  }, [activeProject, userId]);
-
-  const liveTargetOnline =
-    activeTarget?.type === 'dm' ? Boolean(onlineUsers[activeTarget.id]) : false;
+  // WhatsApp-style: automatically open the most recent conversation if available
+  if (teammates.length > 0) {
+    const mostRecent = teammates[0];
+    return (
+      <DirectChatView
+        peerId={mostRecent.userId}
+        peerName={mostRecent.name}
+        peerAvatar={mostRecent.avatarUrl}
+      />
+    );
+  }
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm overflow-hidden">
-      {/* Left: Hub sidebar */}
-      <ChatSidebar
-        projects={projects}
-        activeTarget={activeTarget}
-        onSelectTarget={setActiveTarget}
-        currentUserId={userId || undefined}
+    <>
+      <div className="flex flex-col items-center justify-center h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] p-8 text-center space-y-4">
+        <div className="size-14 rounded-[16px] bg-[#eefaf5] dark:bg-[#006c52]/20 border border-[#79deba]/50 flex items-center justify-center text-[#006c52] dark:text-[#66deb4]">
+          <MessageSquare className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-['Funnel_Display',sans-serif] text-[22px] font-medium text-[#191c1d] dark:text-white">
+            No conversations yet
+          </h2>
+          <p className="text-[13.5px] text-[#3e4944] dark:text-zinc-400 mt-1 max-w-sm">
+            Click the <strong>+</strong> button in the sidebar or start a new conversation below using a teammate&apos;s name or exact email.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowNewMessage(true)}
+          className="px-4 py-2.5 rounded-[8px] bg-[#006c52] hover:bg-[#005742] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] text-[13px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Start New Conversation</span>
+        </button>
+      </div>
+
+      <NewMessageModal
+        isOpen={showNewMessage}
+        onClose={() => setShowNewMessage(false)}
       />
-
-      {/* Center: Chat area */}
-      {activeTarget ? (
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <div className="h-16 px-6 border-b border-zinc-200/80 dark:border-white/[0.08] flex items-center justify-between bg-white/60 dark:bg-white/[0.02] backdrop-blur-md flex-shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              {activeTarget.type === 'channel' ? (
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
-                  <Hash className="w-4 h-4" />
-                </div>
-              ) : (
-                <div className="relative flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center font-bold text-xs overflow-hidden">
-                    {activeTarget.avatarUrl ? (
-                      <img src={activeTarget.avatarUrl} alt={activeTarget.name} className="w-full h-full object-cover" />
-                    ) : (
-                      activeTarget.name.charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <span
-                    className={cn(
-                      'absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white dark:border-zinc-900',
-                      liveTargetOnline ? 'bg-emerald-500' : 'bg-zinc-400'
-                    )}
-                  />
-                </div>
-              )}
-
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                  {activeTarget.name}
-                </h2>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                  {activeTarget.type === 'channel'
-                    ? activeTarget.subtitle || 'Project channel'
-                    : liveTargetOnline
-                    ? 'Active now'
-                    : 'Offline'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <ChatStream target={activeTarget} canModerate={canModerateActiveChannel} />
-        </div>
-      ) : (
-        /* Empty state when no conversation selected */
-        <div className="flex-1 flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-500 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <Users className="w-8 h-8" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Select a conversation</p>
-            <p className="text-xs mt-1">Choose a channel or teammate from the sidebar</p>
-          </div>
-        </div>
-      )}
-
-      {/* Right: Profile/details panel */}
-      {activeTarget && (
-        <ContactProfileDrawer target={activeTarget} project={activeProject} />
-      )}
-    </div>
+    </>
   );
 }
 
 // ─────────────────────────────────────────────
-// Tier 3 Email Lookup resolver
+// Tier 3 Email Lookup resolver (direct URL support)
 // ─────────────────────────────────────────────
 function EmailLookupView({ email }: { email: string }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [status, setStatus] = useState<'loading' | 'not_found' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'not_found' | 'error'>(
+    'loading'
+  );
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -418,7 +500,8 @@ function EmailLookupView({ email }: { email: string }) {
     (async () => {
       try {
         const token = await getToken();
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+        const apiBase =
+          process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
         const res = await window.fetch(
           `${apiBase}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -431,7 +514,9 @@ function EmailLookupView({ email }: { email: string }) {
           );
           return;
         }
-        setErrorMsg(body?.error?.message || `No Synca user found for "${email}".`);
+        setErrorMsg(
+          body?.error?.message || `No Synca user found for "${email}".`
+        );
         setStatus('not_found');
       } catch {
         if (!mounted) return;
@@ -445,26 +530,33 @@ function EmailLookupView({ email }: { email: string }) {
   }, [email, getToken, router]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-[calc(100vh-6rem)] bg-white dark:bg-[#10141e]/65 rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] p-8 text-center gap-4">
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] p-8 text-center gap-4">
       {status === 'loading' ? (
         <>
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
-          <p className="text-sm text-zinc-500">Looking up {email}…</p>
+          <Loader2 className="w-7 h-7 animate-spin text-[#006c52] dark:text-[#66deb4]" />
+          <p className="text-[14px] text-[#3e4944] dark:text-zinc-400">
+            Looking up {email}…
+          </p>
         </>
       ) : (
         <>
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500">
+          <div className="size-14 rounded-[16px] bg-[#ffdad6] dark:bg-rose-500/15 flex items-center justify-center text-[#ba1a1a] dark:text-rose-400">
             <AlertCircle className="w-7 h-7" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">User not found</h2>
-            <p className="text-xs text-zinc-500 mt-1 max-w-sm">{errorMsg}</p>
+            <h2 className="font-['Funnel_Display',sans-serif] text-[20px] font-medium text-[#191c1d] dark:text-white">
+              User not found
+            </h2>
+            <p className="text-[13.5px] text-[#3e4944] dark:text-zinc-400 mt-1 max-w-sm">
+              {errorMsg}
+            </p>
           </div>
           <button
+            type="button"
             onClick={() => router.replace('/chats')}
-            className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-xs font-semibold transition-colors"
+            className="px-4 py-2.5 rounded-[8px] bg-[#191c1d] dark:bg-white text-white dark:text-[#191c1d] text-[13px] font-semibold cursor-pointer"
           >
-            Back to Messages
+            Back to Chats
           </button>
         </>
       )}
@@ -472,9 +564,6 @@ function EmailLookupView({ email }: { email: string }) {
   );
 }
 
-// ─────────────────────────────────────────────
-// Page router — decides which view to render
-// ─────────────────────────────────────────────
 function ChatsContent() {
   const searchParams = useSearchParams();
   const dmParam = searchParams.get('dm');
@@ -486,7 +575,6 @@ function ChatsContent() {
     return <EmailLookupView email={emailParam} />;
   }
 
-  // Direct DM link from sidebar → full-screen chat, no Hub
   if (dmParam) {
     return (
       <DirectChatView
@@ -497,16 +585,15 @@ function ChatsContent() {
     );
   }
 
-  // No specific target → Messages Hub
-  return <MessagesHubView />;
+  return <EmptyChatsView />;
 }
 
 export default function ChatsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-[calc(100vh-6rem)]">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-7 h-7 animate-spin text-[#006c52] dark:text-[#66deb4]" />
         </div>
       }
     >

@@ -4,7 +4,11 @@ import mongoose from 'mongoose';
 import { FILE_LIMITS } from '@synca/config';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { createRateLimiter } from '../middleware/rate-limit.middleware.js';
-import cloudinary, { uploadToCloudinary } from '../lib/cloudinary.js';
+import cloudinary, {
+  ensureCloudinaryConfig,
+  resolveCloudinaryResourceType,
+  uploadToCloudinary,
+} from '../lib/cloudinary.js';
 import { FileRef } from '../models/FileRef.js';
 import { findActiveProject, getProjectRole, isProjectMember } from '../utils/membership.js';
 
@@ -44,7 +48,7 @@ router.post('/upload', requireAuth, uploadLimiter, upload.single('file'), async 
       });
     }
 
-    if (!FILE_LIMITS.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    if (!FILE_LIMITS.ALLOW_ALL_TYPES && !FILE_LIMITS.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       return res.status(400).json({
         success: false,
         error: {
@@ -70,7 +74,16 @@ router.post('/upload', requireAuth, uploadLimiter, upload.single('file'), async 
     }
 
     const folder = scopeId ? `synca-project-${scopeId}` : `synca-user-${uploaderId}`;
-    const cloudinaryResult = await uploadToCloudinary(file.buffer, folder);
+    const cloudinaryResult = await uploadToCloudinary(
+      file.buffer,
+      folder,
+      file.mimetype,
+      file.originalname
+    );
+
+    const expiresAt = new Date(
+      Date.now() + FILE_LIMITS.RETENTION_HOURS * 60 * 60 * 1000
+    );
 
     const fileRef = new FileRef({
       uploaderId,
@@ -79,7 +92,8 @@ router.post('/upload', requireAuth, uploadLimiter, upload.single('file'), async 
       cloudinaryUrl: cloudinaryResult.secure_url,
       fileName: file.originalname,
       fileSize: file.size,
-      fileType: file.mimetype,
+      fileType: file.mimetype || 'application/octet-stream',
+      expiresAt,
     });
 
     await fileRef.save();
@@ -93,6 +107,7 @@ router.post('/upload', requireAuth, uploadLimiter, upload.single('file'), async 
         fileType: fileRef.fileType,
         cloudinaryUrl: fileRef.cloudinaryUrl,
         projectId: fileRef.projectId,
+        expiresAt: fileRef.expiresAt,
       },
     });
   } catch (error: any) {
@@ -128,6 +143,13 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'File not found' },
+      });
+    }
+
+    if (fileRef.expiresAt && new Date(fileRef.expiresAt).getTime() <= Date.now()) {
+      return res.status(410).json({
+        success: false,
+        error: { code: 'FILE_EXPIRED', message: 'This file has expired after its 24-hour retention period' },
       });
     }
 
@@ -208,7 +230,11 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
     }
 
     try {
-      await cloudinary.uploader.destroy(fileRef.cloudinaryPublicId);
+      ensureCloudinaryConfig();
+      const resourceType = resolveCloudinaryResourceType(fileRef.fileType);
+      await cloudinary.uploader.destroy(fileRef.cloudinaryPublicId, {
+        resource_type: resourceType,
+      });
     } catch (cloudErr) {
       console.warn('[FileDelete] Cloudinary asset destroy failed (continuing soft-delete):', cloudErr);
     }

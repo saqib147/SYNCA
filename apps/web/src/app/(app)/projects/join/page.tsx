@@ -42,34 +42,34 @@ function JoinProjectByLinkContent() {
   }, [code, joinProject, router]);
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
-      <div className="w-full max-w-md bg-white dark:bg-[#10141e]/75 rounded-3xl border border-zinc-200/80 dark:border-white/[0.08] p-8 text-center space-y-4 shadow-xl">
+    <div className="flex items-center justify-center h-full">
+      <div className="w-full max-w-md bg-white dark:bg-[#111316] rounded-[20px] border border-[#e5e5e5] dark:border-white/[0.08] p-8 text-center space-y-4 shadow-xl">
         {status === 'joining' && (
           <>
-            <Loader2 className="w-9 h-9 animate-spin text-emerald-500 mx-auto" />
-            <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Joining project…</h1>
-            <p className="text-xs text-zinc-500 font-mono">Code: {code}</p>
+            <Loader2 className="w-9 h-9 animate-spin text-[#006c52] dark:text-[#66deb4] mx-auto" />
+            <h1 className="text-base font-bold text-[#191c1d] dark:text-zinc-100">Joining project…</h1>
+            <p className="text-xs text-[#3e4944] dark:text-zinc-400 font-mono">Code: {code}</p>
           </>
         )}
 
         {status === 'success' && (
           <>
-            <CheckCircle2 className="w-9 h-9 text-emerald-500 mx-auto" />
-            <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Joined! Redirecting…</h1>
+            <CheckCircle2 className="w-9 h-9 text-[#006c52] dark:text-[#66deb4] mx-auto" />
+            <h1 className="text-base font-bold text-[#191c1d] dark:text-zinc-100">Joined! Redirecting…</h1>
           </>
         )}
 
         {status === 'error' && (
           <>
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-[#ffdad6] dark:bg-rose-500/15 text-[#ba1a1a] dark:text-rose-400 flex items-center justify-center mx-auto">
               <AlertCircle className="w-6 h-6" />
             </div>
-            <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Could not join project</h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{errorMsg}</p>
+            <h1 className="text-base font-bold text-[#191c1d] dark:text-zinc-100">Could not join project</h1>
+            <p className="text-xs text-[#3e4944] dark:text-zinc-400">{errorMsg}</p>
             <div className="pt-2">
               <Link
                 href="/projects"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#006c52] hover:bg-[#005742] text-white text-xs font-semibold transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Projects</span>
@@ -86,8 +86,8 @@ export default function JoinProjectLinkPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-8 h-8 animate-spin text-[#006c52] dark:text-[#66deb4]" />
         </div>
       }
     >

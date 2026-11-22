@@ -96,15 +96,18 @@ function isProjectMember(project: Project, userId: string): boolean {
 
 ---
 
-## 3. Messaging Security Rules (Phase 4)
+## 3. Messaging & File Security Rules (Phase 4)
 
 | Action | Rule |
 |---|---|
 | Read / send **project channel** | Caller must be a project member |
 | Read / send **DM** | Caller must be one of the two participants |
 | React / typing | Same membership as send |
-| Delete message | Sender, or project Admin/Moderator (channel only); DM delete = sender only |
-| Attachments | Must pass file ownership + project/DM membership checks before signed URL |
+| Delete single message | Sender, or project Admin/Moderator (channel only); DM delete = sender only |
+| Delete entire DM thread | Either DM participant (`DELETE /api/v1/messages/dm/:peerId`); soft-deletes thread & broadcasts `dm:deleted` |
+| Rich text rendering | XSS-safe React inline markdown renderer (`MessageBubble.tsx`) — no `dangerouslySetInnerHTML` |
+| File uploads & expiry | All file types up to 25 MB; only safe raster images (`png/jpeg/webp/gif/avif`) upload as Cloudinary `image` (SVGs and all other files upload as `raw` to prevent XSS); auto-deleted after 24h (`410 FILE_EXPIRED`) |
+| Departed / removed members | Removing or leaving a project auto-unassigns the user from all active project tasks and revokes channel room access |
 
 ---
 

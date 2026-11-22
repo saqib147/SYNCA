@@ -77,7 +77,7 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 - **Response `200`**: Enriched `Project` object.
 
 #### `PATCH /api/v1/projects/:id`
-- **Description**: Update project details, goals, or milestones. Restricted to `Admin` or `Moderator`.
+- **Description**: Update project details, goals, milestones, board `columns`, or atomically rename a board column (`renameColumn: { from, to }`, which updates both `project.columns` and all matching `Task.column` values). Metadata/goals/milestones require `Admin` or `Moderator`; column ordering and renaming are available to any project member.
 - **Response `200`**: Updated `Project` object.
 
 #### `PATCH /api/v1/projects/:id/members/:userId/role`
@@ -90,7 +90,7 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
   ```
 
 #### `DELETE /api/v1/projects/:id/members/:userId`
-- **Description**: Remove member from project or leave project.
+- **Description**: Remove member from project or leave project. Automatically unassigns the departed/removed user from all active tasks in that project (`Task.updateMany` with `$pull: { assignees }`). Historical channel messages from former members remain visible with greyed-out avatar/name and a `"Former member"` badge.
 
 #### `POST /api/v1/projects/:id/join-code/reset`
 - **Description**: Regenerate a fresh 6-character join code. Restricted to `Admin`.
@@ -103,7 +103,7 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 ### 2.2 Tasks (`/api/v1/tasks`)
 
 #### `POST /api/v1/tasks`
-- **Description**: Create a new task in a project or a personal private task (`projectId: null`).
+- **Description**: Create a new task in a project or a personal private task (`projectId: null`). When creating a project task with no existing board columns (`project.columns` is empty), `"Default Column"` is automatically created on the project and assigned to `task.column`.
 - **Request Body**:
   ```json
   {
@@ -111,6 +111,7 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
     "title": "Design Figma Mockups",
     "description": "High fidelity screens",
     "status": "To Do",
+    "column": "Design",
     "priority": "High",
     "assignees": ["user_2abc123..."],
     "subtasks": [{ "title": "Setup grid", "completed": false }]
@@ -124,10 +125,10 @@ All API endpoints return JSON payloads wrapped in a standard response envelope.
 - **Description**: List user's assigned/created tasks across all their projects plus personal private tasks.
 
 #### `PATCH /api/v1/tasks/:id`
-- **Description**: Update task status, description, subtasks, or assignees. Full planning field edits (`title`, `priority`, `dueDate`, `isPrivate`) require task creator or project Admin/Moderator. Regular members can update `status`, `subtasks`, `description`, and self-assign or unassign themselves.
+- **Description**: Update task status, column, description, subtasks, or assignees. Full planning field edits (`title`, `priority`, `dueDate`, `isPrivate`) require task creator or project Admin/Moderator. Regular members can update `status`, `column`, `subtasks`, `description`, and self-assign or unassign themselves.
 
-#### `PUT /api/v1/tasks/:id/move`
-- **Description**: Update task status and order index for Kanban drag-and-drop. Accessible to project members, assignees, creators, and admins.
+#### `PATCH /api/v1/tasks/:id/move`
+- **Description**: Update task board `column` and `order` index for Kanban drag-and-drop without changing `task.status`. Accessible to project members, assignees, creators, and admins.
 
 #### `POST /api/v1/tasks/:id/comments`
 - **Description**: Add a comment to a task. Accessible to all project members, assignees, task creators, and project admins.
@@ -164,20 +165,29 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
   ```
 - **Auth**: Project Member (channel) or DM participant (dm).
 
+#### `DELETE /api/v1/messages/dm/:peerId`
+- **Description**: Soft delete all messages in a 1:1 DM conversation between the caller and `peerId`, and broadcast `dm:deleted` over Socket.io.
+- **Auth**: Authenticated DM participant.
+- **Response `200`**: `{ peerId, channelId, deletedCount }`.
+
 #### `DELETE /api/v1/messages/:id`
 - **Description**: Soft delete a message. Sender always; for project channels, Admin/Moderator may delete others' messages. DM delete is sender-only.
 - **Response `200`**: `{ messageId, channelId }`.
 
 ### 2.4 Files (`/api/v1/files`)
 
+- **Allowed Types**: All file types (`FILE_LIMITS.ALLOW_ALL_TYPES = true`), max size **25 MB**.
+- **Cloudinary Routing**: Safe raster images (`image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/avif`) upload with `resource_type: 'image'`; all other file types (PDF, DOCX, ZIP, SVG, code, archives, etc.) upload with `resource_type: 'raw'` preserving original filenames.
+- **24-Hour Auto-Delete**: Every uploaded `FileRef` receives `expiresAt = now + 24h`. A background sweeper (`file-cleanup.job.ts`) runs every 15 minutes to destroy expired assets on Cloudinary and soft-delete their `FileRef` records.
+
 #### `POST /api/v1/files/upload`
-- Upload to Cloudinary and create a `FileRef`. Authenticated.
+- Multipart form-data upload (`file`, optional `projectId`). Returns `{ id, url, name, size, type, expiresAt }`. Authenticated.
 
 #### `GET /api/v1/files/:id`
-- Metadata + signed URL. Requires project membership when `projectId` is set.
+- Metadata + URL. Requires project membership when `projectId` is set. Returns `410 FILE_EXPIRED` once `expiresAt` has passed.
 
 #### `DELETE /api/v1/files/:id`
-- Delete FileRef + Cloudinary asset. Uploader or project Admin.
+- Delete `FileRef` + Cloudinary asset (using stored `cloudinaryResourceType`). Uploader or project Admin.
 
 ### 2.5 Users (`/api/v1/users`)
 
@@ -233,6 +243,8 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
 |---|---|---|
 | `project:join` | `{ projectId }` | Join `project:{id}` after membership check |
 | `project:leave` | `{ projectId }` | Leave socket room |
+| `dm:join` | `{ targetUserId }` | Join `dm:{sortedPair}` |
+| `dm:leave` | `{ targetUserId }` | Leave DM socket room |
 | `message:send` | `{ channelType, channelId, content, attachments? }` | Persist + broadcast `message:new` |
 | `message:react` | `{ messageId, emoji }` | Toggle reaction |
 | `message:delete` | `{ messageId }` | Soft delete + broadcast |
@@ -244,9 +256,11 @@ Cursor-paginated history over REST; live delivery via Socket.io (see §3).
 |---|---|
 | `message:new` | `Message` |
 | `message:deleted` | `{ messageId, channelId }` |
+| `dm:deleted` | `{ channelId, peerId, deletedBy }` |
 | `message:reaction` | `{ messageId, reactions }` |
 | `typing:update` | `{ channelId, typingUsers }` |
 | `presence:update` | `{ userId, status, lastSeen }` |
+| `presence:sync` | `{ onlineUserIds }` |
 | `task:updated` | `{ task, projectId }` |
 | `notification:new` | `Notification` (Phase 5) |
 | `error` | `{ code, message }` |

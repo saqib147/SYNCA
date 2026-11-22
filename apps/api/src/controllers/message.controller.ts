@@ -382,3 +382,56 @@ export const deleteMessage = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * DELETE /api/v1/messages/dm/:peerId
+ * Soft-delete all messages in a 1:1 DM conversation between the caller and peerId.
+ */
+export const deleteDmConversation = async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+      });
+    }
+
+    const { peerId } = req.params;
+    const channelId = canonicalizeDmChannelId(userId, peerId);
+    if (!channelId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid peer user ID' },
+      });
+    }
+
+    const result = await Message.updateMany(
+      { channelType: 'dm', channelId, deletedAt: null },
+      { $set: { deletedAt: new Date() } }
+    );
+
+    const io = getIO();
+    if (io) {
+      io.to(`dm:${channelId}`)
+        .to(`user:${userId}`)
+        .to(`user:${peerId}`)
+        .emit('dm:deleted', { channelId, peerId, deletedBy: userId });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        peerId,
+        channelId,
+        deletedCount: result.modifiedCount || 0,
+      },
+    });
+  } catch (err) {
+    console.error('[deleteDmConversation]', err);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to delete conversation' },
+    });
+  }
+};

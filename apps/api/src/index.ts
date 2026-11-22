@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { connectMongoDB, closeMongoDB } from './lib/mongodb.js';
 import { connectRedis, closeRedis } from './lib/redis.js';
 import { createSocketServer, closeSocketServer } from './socket/index.js';
+import { startFileCleanupJob, stopFileCleanupJob } from './jobs/file-cleanup.job.js';
 
 const PORT = process.env.PORT || 4000;
 const app = createApp();
@@ -17,6 +18,7 @@ const shutdown = async (signal: string) => {
   console.log(`[Synca API] Received ${signal}, shutting down gracefully...`);
 
   try {
+    stopFileCleanupJob();
     await closeSocketServer();
     if (httpServerRef) {
       await new Promise<void>((resolve) => httpServerRef!.close(() => resolve()));
@@ -37,6 +39,7 @@ const startServer = async () => {
   try {
     await connectMongoDB();
     await connectRedis();
+    startFileCleanupJob();
 
     const httpServer = http.createServer(app);
     httpServerRef = httpServer;

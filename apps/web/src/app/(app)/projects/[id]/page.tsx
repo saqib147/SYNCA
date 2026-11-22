@@ -32,6 +32,8 @@ import {
   Target,
   Zap,
   Share2,
+  Edit2,
+  X,
 } from 'lucide-react';
 import { useTasks, notifyTasksChanged } from '@/hooks/useTasks';
 import { notifyProjectsChanged } from '@/hooks/useProjects';
@@ -66,8 +68,8 @@ const STATUS_BADGE_MAP: Record<
 > = {
   OnTrack: {
     label: 'On Track',
-    pill: 'bg-[#ddec6b] text-[#606a00]',
-    dot: 'bg-[#5a6400]',
+    pill: 'bg-[#ddec6b] dark:bg-[#F0FF7C]/15 text-[#606a00] dark:text-[#F0FF7C]',
+    dot: 'bg-[#5a6400] dark:bg-[#F0FF7C]',
   },
   ActiveSprint: {
     label: 'Active Sprint',
@@ -148,7 +150,7 @@ export default function ProjectDetailPage({
   // Task Modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [defaultTaskStatus, setDefaultTaskStatus] = useState('To Do');
+  const [defaultTaskColumn, setDefaultTaskColumn] = useState<string | undefined>(undefined);
 
   // Task Detail Modal state
   const [selectedDetailTask, setSelectedDetailTask] = useState<Task | null>(
@@ -165,6 +167,22 @@ export default function ProjectDetailPage({
   const [newMsTitle, setNewMsTitle] = useState('');
   const [newMsDesc, setNewMsDesc] = useState('');
   const [newMsDate, setNewMsDate] = useState('');
+
+  // Inline editing state (Brief, Goals, Milestones)
+  const [isEditingBrief, setIsEditingBrief] = useState(false);
+  const [briefDraft, setBriefDraft] = useState('');
+  const [isSavingBrief, setIsSavingBrief] = useState(false);
+
+  const [editingGoalIdx, setEditingGoalIdx] = useState<number | null>(null);
+  const [editGoalTitle, setEditGoalTitle] = useState('');
+  const [editGoalDesc, setEditGoalDesc] = useState('');
+
+  const [editingMsIdx, setEditingMsIdx] = useState<number | null>(null);
+  const [editMsTitle, setEditMsTitle] = useState('');
+  const [editMsDesc, setEditMsDesc] = useState('');
+  const [editMsStatus, setEditMsStatus] = useState<MilestoneStatus>('Upcoming');
+  const [editMsProgress, setEditMsProgress] = useState<number>(0);
+  const [editMsDate, setEditMsDate] = useState('');
 
   // Project Settings form state
   const [settingsName, setSettingsName] = useState('');
@@ -205,6 +223,7 @@ export default function ProjectDetailPage({
 
   const {
     tasks,
+    setTasks,
     createTask,
     updateTask,
     moveTask,
@@ -230,14 +249,93 @@ export default function ProjectDetailPage({
     return { total, completed, pct };
   }, [tasks]);
 
+  // Ordered board columns (empty by default; preserves project.columns order + any legacy task columns)
+  const boardColumns = useMemo(() => {
+    const ordered = Array.isArray(project?.columns) ? [...project.columns] : [];
+    const seen = new Set(ordered);
+    tasks.forEach((t) => {
+      const col = t.column?.trim() || 'Default Column';
+      if (!seen.has(col)) {
+        seen.add(col);
+        ordered.push(col);
+      }
+    });
+    return ordered;
+  }, [project?.columns, tasks]);
+
+  const handleColumnsChange = async (nextColumns: string[]) => {
+    if (!project) return;
+    const previousColumns = project.columns || [];
+    setProject({ ...project, columns: nextColumns });
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Session expired');
+      const updated = await updateProjectApi(
+        project._id,
+        { columns: nextColumns },
+        token
+      );
+      setProject((prev) =>
+        prev ? { ...prev, columns: updated.columns ?? nextColumns } : null
+      );
+    } catch (err) {
+      console.error('Failed to update board columns:', err);
+      setProject((prev) =>
+        prev ? { ...prev, columns: previousColumns } : null
+      );
+    }
+  };
+
+  const handleRenameColumn = async (oldName: string, newName: string) => {
+    if (!project) return;
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+
+    const previousColumns = project.columns || [];
+    const nextColumns = Array.from(
+      new Set(boardColumns.map((c) => (c === oldName ? trimmed : c)))
+    );
+
+    // Optimistic update on both project columns and tasks belonging to oldName
+    setProject({ ...project, columns: nextColumns });
+    setTasks((prev) =>
+      prev.map((t) =>
+        (t.column || 'Default Column') === oldName
+          ? { ...t, column: trimmed }
+          : t
+      )
+    );
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Session expired');
+      const updated = await updateProjectApi(
+        project._id,
+        { renameColumn: { from: oldName, to: trimmed } },
+        token
+      );
+      setProject((prev) =>
+        prev ? { ...prev, columns: updated.columns ?? nextColumns } : null
+      );
+      notifyTasksChanged();
+    } catch (err) {
+      console.error('Failed to rename column:', err);
+      setProject((prev) =>
+        prev ? { ...prev, columns: previousColumns } : null
+      );
+      refreshTasks();
+    }
+  };
+
   const handleOpenTaskDetail = (task: Task) => {
     setSelectedDetailTask(task);
     setIsDetailModalOpen(true);
   };
 
-  const handleOpenAddTask = (status = 'To Do') => {
+  const handleOpenAddTask = (column?: string) => {
     setEditingTask(null);
-    setDefaultTaskStatus(status);
+    setDefaultTaskColumn(column);
     setIsTaskModalOpen(true);
   };
 
@@ -248,9 +346,32 @@ export default function ProjectDetailPage({
 
   const handleSaveTask = async (data: any) => {
     if (editingTask) {
-      await updateTask(editingTask._id, data);
+      const updated = await updateTask(editingTask._id, data);
+      if (
+        updated?.column &&
+        project &&
+        !(project.columns || []).includes(updated.column)
+      ) {
+        setProject((prev) =>
+          prev
+            ? { ...prev, columns: [...(prev.columns || []), updated.column!] }
+            : null
+        );
+      }
     } else {
-      await createTask(data);
+      const created = await createTask(data);
+      // Reflect auto-created "Default Column" or newly selected column immediately
+      if (
+        created?.column &&
+        project &&
+        !(project.columns || []).includes(created.column)
+      ) {
+        setProject((prev) =>
+          prev
+            ? { ...prev, columns: [...(prev.columns || []), created.column!] }
+            : null
+        );
+      }
     }
   };
 
@@ -340,6 +461,7 @@ export default function ProjectDetailPage({
     const previousGoals = project.goals;
     const updatedGoals = project.goals.filter((_, idx) => idx !== goalIndex);
     setProject({ ...project, goals: updatedGoals });
+    if (editingGoalIdx === goalIndex) setEditingGoalIdx(null);
 
     try {
       const token = await getToken();
@@ -353,6 +475,142 @@ export default function ProjectDetailPage({
     } catch (err) {
       console.error('Failed to delete goal:', err);
       setProject((prev) => (prev ? { ...prev, goals: previousGoals } : null));
+    }
+  };
+
+  const startEditGoal = (idx: number) => {
+    const goal = project?.goals?.[idx];
+    if (!goal) return;
+    setEditingGoalIdx(idx);
+    setEditGoalTitle(goal.title);
+    setEditGoalDesc(goal.description || '');
+  };
+
+  const handleSaveGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !project ||
+      !project.goals ||
+      !canManageSettings ||
+      editingGoalIdx === null ||
+      !editGoalTitle.trim()
+    ) {
+      return;
+    }
+    const previousGoals = project.goals;
+    const updatedGoals = project.goals.map((g, idx) =>
+      idx === editingGoalIdx
+        ? {
+            ...g,
+            title: editGoalTitle.trim(),
+            description: editGoalDesc.trim() || undefined,
+          }
+        : g
+    );
+    setEditingGoalIdx(null);
+    setProject({ ...project, goals: updatedGoals });
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Session expired');
+      await updateProjectApi(
+        project._id,
+        { goals: updatedGoals as any },
+        token
+      );
+      notifyProjectsChanged();
+    } catch (err) {
+      console.error('Failed to update goal:', err);
+      setProject((prev) => (prev ? { ...prev, goals: previousGoals } : null));
+    }
+  };
+
+  const handleSaveBrief = async () => {
+    if (!project || !canManageSettings) return;
+    try {
+      setIsSavingBrief(true);
+      const token = await getToken();
+      if (!token) return;
+      const trimmed = briefDraft.trim();
+      const updated = await updateProjectApi(
+        project._id,
+        { description: trimmed },
+        token
+      );
+      setProject((prev) =>
+        prev ? { ...prev, ...updated, description: trimmed } : null
+      );
+      setSettingsDesc(trimmed);
+      setIsEditingBrief(false);
+      notifyProjectsChanged();
+    } catch (err) {
+      console.error('Failed to update brief:', err);
+    } finally {
+      setIsSavingBrief(false);
+    }
+  };
+
+  const startEditMilestone = (idx: number) => {
+    const ms = project?.milestones?.[idx];
+    if (!ms) return;
+    setEditingMsIdx(idx);
+    setEditMsTitle(ms.title);
+    setEditMsDesc(ms.description || '');
+    setEditMsStatus(ms.status);
+    setEditMsProgress(ms.progress ?? 0);
+    setEditMsDate(
+      ms.date ? new Date(ms.date).toISOString().slice(0, 10) : ''
+    );
+  };
+
+  const handleSaveMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !project ||
+      !project.milestones ||
+      !canManageSettings ||
+      editingMsIdx === null ||
+      !editMsTitle.trim()
+    ) {
+      return;
+    }
+    const previousMilestones = project.milestones;
+    const normalizedProgress =
+      editMsStatus === 'Completed'
+        ? 100
+        : editMsStatus === 'Upcoming'
+          ? 0
+          : Math.min(100, Math.max(0, Number(editMsProgress) || 0));
+
+    const updatedMilestones = project.milestones.map((ms, idx) =>
+      idx === editingMsIdx
+        ? {
+            ...ms,
+            title: editMsTitle.trim(),
+            description: editMsDesc.trim() || undefined,
+            status: editMsStatus,
+            progress: normalizedProgress,
+            date: editMsDate || undefined,
+          }
+        : ms
+    );
+    setEditingMsIdx(null);
+    setProject({ ...project, milestones: updatedMilestones });
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Session expired');
+      const updated = await updateProjectApi(
+        project._id,
+        { milestones: updatedMilestones as any },
+        token
+      );
+      setProject((prev) => (prev ? { ...prev, ...updated } : null));
+    } catch (err) {
+      console.error('Failed to update milestone:', err);
+      setProject((prev) =>
+        prev ? { ...prev, milestones: previousMilestones } : null
+      );
     }
   };
 
@@ -527,7 +785,7 @@ export default function ProjectDetailPage({
 
   if (isLoading) {
     return (
-      <div className="min-h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col items-center justify-center gap-3">
+      <div className="h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-7 h-7 text-[#006c52] dark:text-[#66deb4] animate-spin" />
         <p className="text-[14px] text-[#3e4944] dark:text-zinc-400">
           Loading project workspace...
@@ -538,7 +796,7 @@ export default function ProjectDetailPage({
 
   if (!project) {
     return (
-      <div className="min-h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex items-center justify-center p-8">
+      <div className="h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex items-center justify-center p-8">
         <div className="text-center space-y-4 max-w-sm">
           <div className="size-12 rounded-[14px] bg-[#f8f9fa] dark:bg-white/[0.06] border border-[#e5e7eb] dark:border-white/[0.08] flex items-center justify-center mx-auto text-[#3e4944] dark:text-zinc-400">
             <FolderKanban className="w-6 h-6" />
@@ -569,9 +827,9 @@ export default function ProjectDetailPage({
   const totalGoalsCount = project.goals?.length || 0;
 
   return (
-    <div className="min-h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col overflow-hidden">
+    <div className="h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col overflow-hidden">
       {/* Top Bar: Breadcrumb + Search + Share & Add Task (Figma 91:2549 & 93:3149) */}
-      <div className="px-6 sm:px-9 pt-6 pb-0">
+      <div className="px-6 sm:px-9 pt-6 pb-0 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <nav className="flex items-center gap-1.5 text-[13px] text-[#3e4944] dark:text-zinc-400">
             <Link
@@ -728,8 +986,15 @@ export default function ProjectDetailPage({
         </div>
       </div>
 
-      {/* Active Tab Content */}
-      <div className="flex-1 px-6 sm:px-9 py-6">
+      {/* Active Tab Content (scrolls inside the card; header & tabs remain pinned) */}
+      <div
+        className={cn(
+          'flex-1 min-h-0 px-6 sm:px-9 py-6',
+          activeTab === 'board' || activeTab === 'conversation'
+            ? 'overflow-hidden flex flex-col'
+            : 'overflow-y-auto'
+        )}
+      >
         {/* TAB 1: OVERVIEW (Figma 91:2549) */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -744,21 +1009,58 @@ export default function ProjectDetailPage({
                       Project Brief
                     </h2>
                   </div>
-                  {canManageSettings && (
+                  {canManageSettings && !isEditingBrief && (
                     <button
                       type="button"
-                      onClick={() => setActiveTab('settings')}
-                      className="text-[12.5px] font-medium text-[#006c52] dark:text-[#79deba] hover:underline cursor-pointer"
+                      onClick={() => {
+                        setBriefDraft(project.description || '');
+                        setIsEditingBrief(true);
+                      }}
+                      className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[#006c52] dark:text-[#79deba] hover:underline cursor-pointer"
                     >
-                      Edit Brief
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit Brief</span>
                     </button>
                   )}
                 </div>
 
-                <p className="text-[14.5px] leading-[24px] text-[#3e4944] dark:text-zinc-300 whitespace-pre-line">
-                  {project.description ||
-                    'No project brief has been added yet. Use Edit Brief in Settings to outline the project scope, objectives, and deliverables.'}
-                </p>
+                {isEditingBrief ? (
+                  <div className="space-y-3">
+                    <textarea
+                      rows={4}
+                      autoFocus
+                      value={briefDraft}
+                      onChange={(e) => setBriefDraft(e.target.value)}
+                      placeholder="Describe the project scope, objectives, and key deliverables..."
+                      className="w-full p-3.5 rounded-[8px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#79deba] text-[14px] leading-[22px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52] resize-none"
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingBrief(false)}
+                        className="px-3 py-1.5 rounded-[6px] text-[12.5px] font-medium text-[#3e4944] dark:text-zinc-400 hover:bg-[#e7e8e9] dark:hover:bg-white/[0.06] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSavingBrief}
+                        onClick={handleSaveBrief}
+                        className="px-4 py-1.5 rounded-[6px] bg-[#006c52] dark:bg-[#66deb4] text-white dark:text-[#111316] text-[12.5px] font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSavingBrief && (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        )}
+                        <span>Save Brief</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[14.5px] leading-[24px] text-[#3e4944] dark:text-zinc-300 whitespace-pre-line">
+                    {project.description ||
+                      'No project brief has been added yet. Click Edit Brief to outline the project scope, objectives, and deliverables.'}
+                  </p>
+                )}
 
                 <div className="pt-4 border-t border-[#e5e7eb] dark:border-white/[0.06] grid grid-cols-3 gap-4">
                   <div>
@@ -862,6 +1164,114 @@ export default function ProjectDetailPage({
                     {project.milestones.map((ms, idx) => {
                       const isCompleted = ms.status === 'Completed';
                       const isInProgress = ms.status === 'InProgress';
+                      const isEditingThis = editingMsIdx === idx;
+
+                      if (isEditingThis && canManageSettings) {
+                        return (
+                          <form
+                            key={idx}
+                            onSubmit={handleSaveMilestone}
+                            className="p-4 rounded-[12px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#79deba] space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#006c52] dark:text-[#79deba]">
+                                Edit Milestone
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingMsIdx(null)}
+                                className="p-1 rounded text-[#3e4944] dark:text-zinc-400 hover:bg-[#e7e8e9] dark:hover:bg-white/[0.08] cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <input
+                              type="text"
+                              required
+                              autoFocus
+                              value={editMsTitle}
+                              onChange={(e) => setEditMsTitle(e.target.value)}
+                              placeholder="Milestone title"
+                              className="w-full h-[36px] px-3 rounded-[8px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[13px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52]"
+                            />
+
+                            <textarea
+                              rows={2}
+                              value={editMsDesc}
+                              onChange={(e) => setEditMsDesc(e.target.value)}
+                              placeholder="Short description (optional)"
+                              className="w-full p-2.5 rounded-[8px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[12.5px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52] resize-none"
+                            />
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <select
+                                value={editMsStatus}
+                                onChange={(e) => {
+                                  const next = e.target.value as MilestoneStatus;
+                                  setEditMsStatus(next);
+                                  if (next === 'Completed') setEditMsProgress(100);
+                                  else if (next === 'Upcoming') setEditMsProgress(0);
+                                  else if (editMsProgress === 0 || editMsProgress === 100)
+                                    setEditMsProgress(50);
+                                }}
+                                className="h-[36px] px-2.5 rounded-[8px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[12.5px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52]"
+                              >
+                                <option value="Upcoming" className="bg-white dark:bg-[#17191d]">Upcoming</option>
+                                <option value="InProgress" className="bg-white dark:bg-[#17191d]">In Progress</option>
+                                <option value="Completed" className="bg-white dark:bg-[#17191d]">Completed</option>
+                              </select>
+
+                              <input
+                                type="date"
+                                value={editMsDate}
+                                onChange={(e) => setEditMsDate(e.target.value)}
+                                className="h-[36px] px-2.5 rounded-[8px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[12.5px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52]"
+                              />
+                            </div>
+
+                            {editMsStatus === 'InProgress' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[11.5px] text-[#3e4944] dark:text-zinc-400">
+                                  <span>Progress</span>
+                                  <span className="font-semibold text-[#191c1d] dark:text-white">
+                                    {editMsProgress}%
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  step={5}
+                                  value={editMsProgress}
+                                  onChange={(e) =>
+                                    setEditMsProgress(Number(e.target.value))
+                                  }
+                                  className="w-full accent-[#006c52] dark:accent-[#66deb4] cursor-pointer"
+                                />
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMsIdx(null)}
+                                className="px-3 py-1.5 rounded-[6px] text-[12px] text-[#3e4944] dark:text-zinc-400 hover:bg-[#e7e8e9] dark:hover:bg-white/[0.06] cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={!editMsTitle.trim()}
+                                className="px-3.5 py-1.5 rounded-[6px] bg-[#006c52] dark:bg-[#66deb4] text-white dark:text-[#111316] text-[12px] font-semibold disabled:opacity-40 cursor-pointer"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </form>
+                        );
+                      }
+
                       return (
                         <div
                           key={idx}
@@ -890,14 +1300,14 @@ export default function ProjectDetailPage({
                                   isCompleted
                                     ? 'bg-[#e7e8e9] dark:bg-white/[0.08] text-[#3e4944] dark:text-zinc-300'
                                     : isInProgress
-                                      ? 'bg-[#ddec6b] text-[#5a6400]'
+                                      ? 'bg-[#ddec6b] dark:bg-[#F0FF7C]/15 text-[#5a6400] dark:text-[#F0FF7C]'
                                       : 'bg-[#e7e8e9] dark:bg-white/[0.08] text-[#3e4944] dark:text-zinc-400'
                                 )}
                               >
                                 {isInProgress ? 'IN PROGRESS' : ms.status}
                               </button>
 
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 {isCompleted ? (
                                   <CheckCircle2 className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                                 ) : isInProgress ? (
@@ -906,14 +1316,24 @@ export default function ProjectDetailPage({
                                   <Rocket className="w-4 h-4 text-[#3e4944] dark:text-zinc-400" />
                                 )}
                                 {canManageSettings && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteMilestone(idx)}
-                                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#3e4944] hover:text-[#ba1a1a] transition-all cursor-pointer"
-                                    title="Delete milestone"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditMilestone(idx)}
+                                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#3e4944] dark:text-zinc-400 hover:text-[#006c52] dark:hover:text-[#66deb4] transition-all cursor-pointer"
+                                      title="Edit milestone"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMilestone(idx)}
+                                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#3e4944] dark:text-zinc-400 hover:text-[#ba1a1a] dark:hover:text-rose-400 transition-all cursor-pointer"
+                                      title="Delete milestone"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -995,64 +1415,122 @@ export default function ProjectDetailPage({
 
                 <div className="space-y-3">
                   {project.goals && project.goals.length > 0 ? (
-                    project.goals.map((goal, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() =>
-                          canManageSettings && handleToggleGoal(idx)
-                        }
-                        className={cn(
-                          'group flex items-start gap-3 p-2 -mx-2 rounded-[10px] transition-colors',
-                          canManageSettings &&
-                            'cursor-pointer hover:bg-[#f8f9fa] dark:hover:bg-white/[0.04]'
-                        )}
-                      >
+                    project.goals.map((goal, idx) => {
+                      if (editingGoalIdx === idx && canManageSettings) {
+                        return (
+                          <form
+                            key={idx}
+                            onSubmit={handleSaveGoal}
+                            className="p-3 rounded-[10px] bg-[#f8f9fa] dark:bg-white/[0.04] border border-[#79deba] space-y-2"
+                          >
+                            <input
+                              type="text"
+                              required
+                              autoFocus
+                              value={editGoalTitle}
+                              onChange={(e) => setEditGoalTitle(e.target.value)}
+                              placeholder="Goal title"
+                              className="w-full h-[34px] px-2.5 rounded-[6px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[13px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52]"
+                            />
+                            <input
+                              type="text"
+                              value={editGoalDesc}
+                              onChange={(e) => setEditGoalDesc(e.target.value)}
+                              placeholder="Short note / target (optional)"
+                              className="w-full h-[32px] px-2.5 rounded-[6px] bg-white dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.12] text-[12px] text-[#191c1d] dark:text-white focus:outline-none focus:border-[#006c52]"
+                            />
+                            <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingGoalIdx(null)}
+                                className="px-2.5 py-1 rounded-[6px] text-[11.5px] text-[#3e4944] dark:text-zinc-400 hover:bg-[#e7e8e9] dark:hover:bg-white/[0.06] cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={!editGoalTitle.trim()}
+                                className="px-3 py-1 rounded-[6px] bg-[#006c52] dark:bg-[#66deb4] text-white dark:text-[#111316] text-[11.5px] font-semibold disabled:opacity-40 cursor-pointer"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </form>
+                        );
+                      }
+
+                      return (
                         <div
+                          key={idx}
+                          onClick={() =>
+                            canManageSettings && handleToggleGoal(idx)
+                          }
                           className={cn(
-                            'size-8 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5 transition-colors',
-                            goal.completed
-                              ? 'bg-[#66deb4] text-[#111316]'
-                              : 'bg-[#e6f7f1] dark:bg-[#006c52]/25 text-[#006c52] dark:text-[#79deba]'
+                            'group flex items-start gap-3 p-2 -mx-2 rounded-[10px] transition-colors',
+                            canManageSettings &&
+                              'cursor-pointer hover:bg-[#f8f9fa] dark:hover:bg-white/[0.04]'
                           )}
                         >
-                          {goal.completed ? (
-                            <Check className="w-4 h-4 stroke-[2.5]" />
-                          ) : (
-                            <Target className="w-4 h-4" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p
+                          <div
                             className={cn(
-                              'text-[13.5px] font-medium leading-[19px]',
+                              'size-8 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5 transition-colors',
                               goal.completed
-                                ? 'line-through text-[#3e4944]/60 dark:text-zinc-500'
-                                : 'text-[#191c1d] dark:text-zinc-100'
+                                ? 'bg-[#66deb4] text-[#111316]'
+                                : 'bg-[#e6f7f1] dark:bg-[#006c52]/25 text-[#006c52] dark:text-[#79deba]'
                             )}
                           >
-                            {goal.title}
-                          </p>
-                          {goal.description && (
-                            <p className="text-[12px] text-[#3e4944] dark:text-zinc-400 mt-0.5 line-clamp-2">
-                              {goal.description}
+                            {goal.completed ? (
+                              <Check className="w-4 h-4 stroke-[2.5]" />
+                            ) : (
+                              <Target className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={cn(
+                                'text-[13.5px] font-medium leading-[19px]',
+                                goal.completed
+                                  ? 'line-through text-[#3e4944]/60 dark:text-zinc-500'
+                                  : 'text-[#191c1d] dark:text-zinc-100'
+                              )}
+                            >
+                              {goal.title}
                             </p>
+                            {goal.description && (
+                              <p className="text-[12px] text-[#3e4944] dark:text-zinc-400 mt-0.5 line-clamp-2">
+                                {goal.description}
+                              </p>
+                            )}
+                          </div>
+                          {canManageSettings && (
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startEditGoal(idx);
+                                }}
+                                className="p-1 rounded text-[#3e4944] dark:text-zinc-400 hover:text-[#006c52] dark:hover:text-[#79deba] transition-colors cursor-pointer"
+                                title="Edit goal"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteGoal(idx);
+                                }}
+                                className="p-1 rounded text-[#3e4944] dark:text-zinc-400 hover:text-[#ba1a1a] transition-colors cursor-pointer"
+                                title="Delete goal"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                         </div>
-                        {canManageSettings && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteGoal(idx);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#3e4944] hover:text-[#ba1a1a] transition-all cursor-pointer"
-                            title="Delete goal"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="text-[13px] text-[#3e4944] dark:text-zinc-500 py-2">
                       No strategic goals added yet.
@@ -1223,7 +1701,10 @@ export default function ProjectDetailPage({
         {/* TAB 2: KANBAN BOARD (Figma 93:3149) */}
         {activeTab === 'board' && (
           <ProjectKanbanBoard
+            columns={boardColumns}
             tasks={filteredTasks}
+            onColumnsChange={handleColumnsChange}
+            onRenameColumn={handleRenameColumn}
             onMoveTask={moveTask}
             onEditTask={handleOpenEditTask}
             onSelectTask={handleOpenTaskDetail}
@@ -1234,14 +1715,15 @@ export default function ProjectDetailPage({
           />
         )}
 
-        {/* TAB 3: LIST VIEW */}
+        {/* TAB 3: LIST VIEW (Grouped by Board Columns) */}
         {activeTab === 'list' && (
           <ProjectTaskTable
+            columns={boardColumns}
             tasks={filteredTasks}
             onEditTask={handleOpenEditTask}
             onSelectTask={handleOpenTaskDetail}
             onDeleteTask={deleteTask}
-            onAddTask={() => handleOpenAddTask()}
+            onAddTaskToColumn={handleOpenAddTask}
             members={teamRoster}
             canManageTask={(t) => canManageSettings || t.createdBy === userId}
           />
@@ -1357,7 +1839,7 @@ export default function ProjectDetailPage({
                     <button
                       type="submit"
                       disabled={isSavingSettings}
-                      className="px-5 py-2.5 rounded-[8px] text-[13px] font-semibold bg-[#006c52] hover:bg-[#005943] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] inline-flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                      className="px-5 py-2.5 rounded-[8px] text-[13px] font-semibold bg-[#006c52] hover:bg-[#005742] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] inline-flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
                     >
                       {isSavingSettings && (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -1402,7 +1884,7 @@ export default function ProjectDetailPage({
                       type="button"
                       onClick={handleResetJoinCode}
                       disabled={isResettingCode}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-[#f8f9fa] dark:bg-white/[0.06] border border-[#bdc9c2] dark:border-white/[0.12] text-[11.5px] font-medium text-[#191c1d] dark:text-zinc-200 hover:border-[#006c52] transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] bg-[#f8f9fa] dark:bg-white/[0.06] border border-[#bdc9c2] dark:border-white/[0.12] text-[11.5px] font-medium text-[#191c1d] dark:text-zinc-200 hover:border-[#006c52] dark:hover:border-[#66deb4] transition-colors cursor-pointer"
                     >
                       <RefreshCw
                         className={cn(
@@ -1432,7 +1914,7 @@ export default function ProjectDetailPage({
                         title="Copy Code"
                       >
                         {copiedCode ? (
-                          <Check className="w-3.5 h-3.5 text-[#006c52]" />
+                          <Check className="w-3.5 h-3.5 text-[#006c52] dark:text-[#66deb4]" />
                         ) : (
                           <Copy className="w-3.5 h-3.5" />
                         )}
@@ -1445,7 +1927,7 @@ export default function ProjectDetailPage({
                         title="Copy Invite Link"
                       >
                         {copiedLink ? (
-                          <Check className="w-3.5 h-3.5 text-[#006c52]" />
+                          <Check className="w-3.5 h-3.5 text-[#006c52] dark:text-[#66deb4]" />
                         ) : (
                           <Link2 className="w-3.5 h-3.5" />
                         )}
@@ -1527,7 +2009,9 @@ export default function ProjectDetailPage({
         onClose={() => setIsTaskModalOpen(false)}
         onSave={handleSaveTask}
         task={editingTask}
-        defaultStatus={defaultTaskStatus}
+        defaultStatus="To Do"
+        defaultColumn={defaultTaskColumn}
+        columns={boardColumns}
         projectId={project._id}
         members={teamRoster}
       />

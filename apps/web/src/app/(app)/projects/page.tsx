@@ -166,8 +166,8 @@ export default function ProjectsPage() {
     switch (status) {
       case 'OnTrack':
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#ddec6b] px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#606a00]">
-            <span className="size-[8px] rounded-full bg-[#5a6400]" />
+          <span className="inline-flex items-center gap-1.5 rounded-[12px] bg-[#ddec6b] dark:bg-[#F0FF7C]/15 px-3 py-1 text-[12px] font-normal tracking-[0.6px] text-[#606a00] dark:text-[#F0FF7C]">
+            <span className="size-[8px] rounded-full bg-[#5a6400] dark:bg-[#F0FF7C]" />
             On Track
           </span>
         );
@@ -204,9 +204,9 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-2rem)] rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] px-6 py-7 sm:px-9 sm:py-9 lg:px-11 lg:py-10 flex flex-col">
+    <div className="h-full rounded-[20px] bg-white dark:bg-[#111316] border border-[#e5e5e5] dark:border-white/[0.08] px-6 py-7 sm:px-9 sm:py-8 lg:px-11 flex flex-col overflow-hidden">
       {/* Page Header & Filters */}
-      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-5 mb-9">
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-5 mb-7 shrink-0">
         <div className="space-y-1">
           <h1 className="font-['Funnel_Display',sans-serif] font-medium text-[34px] sm:text-[42px] leading-[1.15] tracking-[-0.96px] text-[#191c1d] dark:text-white">
             Project Portfolio
@@ -317,14 +317,14 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Bento Grid Project Cards */}
+      {/* Bento Grid Project Cards (scrolls internally) */}
       {isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center py-24 text-[#3e4944] dark:text-zinc-400 gap-3">
           <Loader2 className="w-7 h-7 animate-spin text-[#006c52] dark:text-[#79deba]" />
           <p className="text-[14px]">Loading project portfolio...</p>
         </div>
       ) : (
-        <>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-2">
           {filteredProjects.length === 0 && (search || statusFilter !== 'All' || privacyFilter !== 'All' || memberFilter !== 'All') ? (
             <div className="flex flex-col items-center justify-center text-center py-16 px-6 rounded-[8px] border border-dashed border-[#bdc9c2] dark:border-white/[0.14] bg-[#f8f9fa]/60 dark:bg-white/[0.02] mb-6">
               <FolderKanban className="w-10 h-10 text-[#3e4944]/60 dark:text-zinc-500 mb-3" />
@@ -609,7 +609,7 @@ export default function ProjectsPage() {
               </span>
             </button>
           </div>
-        </>
+        </div>
       )}
 
       {/* Modals */}

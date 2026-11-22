@@ -138,7 +138,7 @@ export function JoinProjectModal({ isOpen, onClose, onSuccess }: JoinProjectModa
             <button
               type="submit"
               disabled={isLoading || joinCode.trim().length !== 6}
-              className="flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold rounded-[8px] bg-[#006c52] hover:bg-[#005943] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold rounded-[8px] bg-[#006c52] hover:bg-[#005742] dark:bg-[#66deb4] dark:hover:bg-[#52d1a4] text-white dark:text-[#111316] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               {isLoading ? (
                 <>

@@ -92,12 +92,15 @@ export async function createTask(req: Request, res: Response) {
       title,
       description,
       status,
+      column,
       priority,
       assignees,
       dueDate,
       subtasks,
       isPrivate,
     } = parseResult.data;
+
+    let resolvedColumn = column?.trim() || '';
 
     if (projectId) {
       if (!mongoose.Types.ObjectId.isValid(projectId)) {
@@ -120,12 +123,25 @@ export async function createTask(req: Request, res: Response) {
           error: { code: 'FORBIDDEN', message: 'You must be a member of this project to create tasks' },
         });
       }
+
+      const existingColumns = Array.isArray(project.columns) ? project.columns : [];
+      if (!resolvedColumn) {
+        resolvedColumn = existingColumns.length > 0 ? existingColumns[0] : 'Default Column';
+      }
+
+      // Auto-register the column on the project if it doesn't exist yet (e.g. "Default Column")
+      if (!existingColumns.includes(resolvedColumn)) {
+        await Project.updateOne(
+          { _id: project._id },
+          { $addToSet: { columns: resolvedColumn } }
+        );
+      }
     }
 
     // Determine highest order for this column
     const lastTask = await Task.findOne({
       projectId: projectId || null,
-      status: status || 'To Do',
+      ...(projectId ? { column: resolvedColumn } : { status: status || 'To Do' }),
       deletedAt: null,
     })
       .sort({ order: -1 })
@@ -139,6 +155,7 @@ export async function createTask(req: Request, res: Response) {
       title,
       description: description || '',
       status: status || 'To Do',
+      column: resolvedColumn,
       order: nextOrder,
       priority: priority || 'Medium',
       assignees: assignees && assignees.length > 0 ? assignees : [userId],
@@ -146,6 +163,8 @@ export async function createTask(req: Request, res: Response) {
       subtasks: subtasks || [],
       isPrivate: Boolean(isPrivate),
     });
+
+    broadcastTaskUpdate(newTask);
 
     return res.status(201).json({
       success: true,
@@ -390,6 +409,15 @@ export async function updateTask(req: Request, res: Response) {
       if (updates.title && canEditFull) task.title = updates.title.trim();
       if (updates.description !== undefined) task.description = updates.description.trim();
       if (updates.status) task.status = updates.status;
+      if (updates.column !== undefined && updates.column.trim()) {
+        task.column = updates.column.trim();
+        if (task.projectId) {
+          await Project.updateOne(
+            { _id: task.projectId },
+            { $addToSet: { columns: task.column } }
+          );
+        }
+      }
       if (updates.priority && canEditFull) task.priority = updates.priority;
       if (updates.assignees) task.assignees = updates.assignees;
       if (updates.dueDate !== undefined && canEditFull) task.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
@@ -466,9 +494,20 @@ export async function moveTask(req: Request, res: Response) {
         });
       }
 
-        const { newStatus, newOrder } = parseResult.data;
+        const { newColumn, newStatus, newOrder } = parseResult.data;
 
-        task.status = newStatus;
+        if (newColumn) {
+          task.column = newColumn;
+          if (task.projectId) {
+            await Project.updateOne(
+              { _id: task.projectId },
+              { $addToSet: { columns: newColumn } }
+            );
+          }
+        }
+        if (newStatus) {
+          task.status = newStatus;
+        }
         task.order = newOrder;
         await task.save();
         broadcastTaskUpdate(task);

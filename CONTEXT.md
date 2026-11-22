@@ -15,9 +15,9 @@
   - **`Admin`**: Project owner/creator or promoted admin with full control over settings, member roles, join codes, and project deletion.
   - **`Moderator`**: Manages project tasks, goals, milestones, invites, and channel message moderation.
   - **`Member`**: Collaborates on tasks, Kanban cards, subtasks, and project channels.
-- **Tasks**: Work items assigned within projects or personal private tasks (`projectId: null`). Public project tasks are visible to all members; private project tasks are scoped to creator/assignees (+ Admin/Mod oversight).
-- **Messaging (Phase 4)**: Real-time 1:1 DMs and **one default `#general` channel per project** with emoji reactions, typing indicators, presence, unread badges/toasts, and Cloudinary file attachments. Multi-named channels, Tiptap rich-text, and `@mentions` are scheduled for Phase 5+.
-- **File Sharing**: Cloudinary-backed file attachments with file cards and signed private URLs.
+- **Tasks**: Work items assigned within projects or personal private tasks (`projectId: null`). Public project tasks are visible to all members; private project tasks are scoped to creator/assignees (+ Admin/Mod oversight). **Board columns (`Project.columns`, `Task.column`) are decoupled from `Task.status`** — new projects start with `columns: []`, auto-creating `"Default Column"` on first task creation, and moving cards between columns does not mutate `task.status`.
+- **Messaging (Phase 4)**: Real-time 1:1 DMs and **one default `#general` channel per project** with XSS-safe inline markdown formatting (`**bold**`, `_italic_`, `` `code` ``, `- bullet` lists) in both composers, emoji reactions, typing indicators, presence, unread badges/toasts, DM conversation soft-delete (`DELETE /api/v1/messages/dm/:peerId`), single WhatsApp-style left Sidebar for all conversations, and former-member greyed-out attribution in project channels. Multi-named channels and `@mentions` are scheduled for Phase 5+.
+- **File Sharing**: Cloudinary-backed file attachments accepting **all file types** up to **25 MB**, with automatic **24-hour expiration** (`FileRef.expiresAt` + 15-minute `file-cleanup.job` destroying Cloudinary assets and returning `410 FILE_EXPIRED`), live countdown badges, inline raster image thumbnails, and non-clickable expired file placeholders.
 
 > **Deprecated**: Room / Workspace layers, `RoomWide` privacy, and legacy roles (`Owner`, `Manager`, `Viewer`, `Guest`). See `SYNCA_README.md` (legacy product brief) vs this file (active truth).
 
@@ -52,10 +52,10 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `POST` | `/api/v1/projects/join` | Join an existing project using a 6-character `joinCode` | Authenticated |
 | `GET` | `/api/v1/projects` | List all active projects the user belongs to | Authenticated |
 | `GET` | `/api/v1/projects/:id` | Get project detail (Overview, Goals, Milestones, Enriched Roster) | Project Member |
-| `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, or milestones | Admin / Moderator |
+| `PATCH` | `/api/v1/projects/:id` | Update project metadata, goals, milestones, `columns` order (any member), or atomic `renameColumn` | Admin / Moderator (columns: Member) |
 | `POST` | `/api/v1/projects/:id/members` | Add member directly by exact email or shared-project userId (rate-limited) | Admin / Moderator |
 | `PATCH` | `/api/v1/projects/:id/members/:userId/role` | Promote/demote project member (`Admin`, `Moderator`, `Member`) | Project Admin |
-| `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove member from project or leave project | Project Admin or Self |
+| `DELETE` | `/api/v1/projects/:id/members/:userId` | Remove member from project or leave project (auto-unassigns from all project tasks) | Project Admin or Self |
 | `POST` | `/api/v1/projects/:id/join-code/reset` | Regenerate project join code | Project Admin |
 | `DELETE` | `/api/v1/projects/:id` | Soft delete project and cascade delete child tasks | Project Admin |
 
@@ -67,7 +67,7 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `GET` | `/api/v1/tasks?projectId=` | List tasks for a project (All public project tasks visible; private tasks scoped to creator/assignee/admin) | Project Member |
 | `GET` | `/api/v1/tasks/my` | Get user's assigned/created tasks across all joined projects plus personal tasks | Authenticated |
 | `PATCH` | `/api/v1/tasks/:id` | Update task: status, subtasks, description, self-assign (Member); full planning metadata (Creator / Admin / Mod) | Project Member / Assignee / Admin |
-| `PUT` | `/api/v1/tasks/:id/move` | Kanban reordering and column transition | Project Member / Assignee / Admin |
+| `PATCH` | `/api/v1/tasks/:id/move` | Kanban reordering & column transition (`column` + `order`; decoupled from `status`) | Project Member / Assignee / Admin |
 | `POST` | `/api/v1/tasks/:id/comments` | Add comment to a task | Project Member / Assignee / Admin |
 | `DELETE` | `/api/v1/tasks/:id` | Soft delete task | Task Creator or Project Admin / Moderator |
 
@@ -78,14 +78,15 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 | `GET` | `/api/v1/messages/dm/:userId` | Get DM message history (cursor paginated) | DM Participant |
 | `GET` | `/api/v1/messages/channel/:projectId` | Get default project channel history (cursor paginated) | Project Member |
 | `POST` | `/api/v1/messages` | Send message (REST fallback; primary = Socket `message:send`) | Project Member / DM Participant |
+| `DELETE` | `/api/v1/messages/dm/:peerId` | Soft delete all messages in a 1:1 DM thread & broadcast `dm:deleted` | DM Participant |
 | `DELETE` | `/api/v1/messages/:id` | Soft delete message | Sender / Project Admin / Moderator (channel) |
 
 ### 3.4 File Storage (`/api/v1/files`)
 
 | Method | Endpoint | Description | Auth / Permission |
 |---|---|---|---|
-| `POST` | `/api/v1/files/upload` | Upload file to Cloudinary & create FileRef | Authenticated |
-| `GET` | `/api/v1/files/:id` | Get file metadata & signed URL | Project Member / Uploader |
+| `POST` | `/api/v1/files/upload` | Upload any file type (max 25 MB) to Cloudinary (`image` for raster images, `raw` otherwise) with 24h `expiresAt` | Authenticated |
+| `GET` | `/api/v1/files/:id` | Get file metadata & URL (`410 FILE_EXPIRED` once past 24h `expiresAt`) | Project Member / Uploader |
 | `DELETE` | `/api/v1/files/:id` | Delete file reference and Cloudinary asset | Uploader / Admin |
 
 ### 3.5 Users (`/api/v1/users`)
@@ -121,6 +122,7 @@ Detailed roles and permissions specification is documented in [`docs/roles-and-p
 ### Server → Client (`Listen`)
 - `message:new` `Message`
 - `message:deleted` `{ messageId, channelId }`
+- `dm:deleted` `{ channelId, peerId, deletedBy }`
 - `message:reaction` `{ messageId, reactions }`
 - `typing:update` `{ channelId, typingUsers }`
 - `presence:update` `{ userId, status, lastSeen }`
@@ -147,7 +149,7 @@ DM discovery uses a **tiered scoped approach** to prevent exposing the full user
 
 - **Tier 1 — Teammate Search (default)**: The "New Message" modal (`NewMessageModal.tsx`) queries only the users who share at least one project with the current user via `useTeammates()` (`GET /api/v1/users/teammates`). The user can filter by display name with keyboard navigation (`↑↓`, `Enter`, `Esc`).
 - **Tier 2 — Contextual Quick-Actions**: "Message" buttons on task assignees (`TaskDetailModal`) and project team rosters (`projects/[id]`) open a DM directly.
-- **Tier 3 — Exact Email Lookup**: If the search query contains `@`, the modal switches to an email-lookup CTA that routes to `/chats?email=...` and resolves via `GET /api/v1/users/lookup?email=...` (exact match only, rate-limited).
+- **Tier 3 — Inline Exact Email Lookup**: If the search query contains `@`, `NewMessageModal.tsx` performs an inline live lookup against `GET /api/v1/users/lookup?email=...` (exact match only, rate-limited), previews the matched user, opens the DM in 1 click, and immediately updates the left Sidebar optimistically via `upsertDmPeerLocally()`.
 
 ---
 

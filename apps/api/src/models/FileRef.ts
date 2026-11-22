@@ -8,6 +8,7 @@ export interface IFileRef extends Document {
   fileName: string;
   fileSize: number;
   fileType: string;
+  expiresAt: Date;
   deletedAt: Date | null;
   uploadedAt: Date;
 }
@@ -21,6 +22,11 @@ const FileRefSchema = new Schema<IFileRef>(
     fileName: { type: String, required: true },
     fileSize: { type: Number, required: true },
     fileType: { type: String, required: true },
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 24 * 60 * 60 * 1000),
+      index: true,
+    },
     deletedAt: { type: Date, default: null },
   },
   {

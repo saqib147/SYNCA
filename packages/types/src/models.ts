@@ -50,6 +50,7 @@ export interface Project {
   privacy: ProjectPrivacy;
   goals?: ProjectGoal[];
   milestones?: Milestone[];
+  columns?: string[]; // ordered board columns (empty by default)
   teamMembers: string[]; // userIds
   members?: ProjectTeamMember[];
   connectedFiles?: string[]; // fileRefIds
@@ -85,6 +86,7 @@ export interface Task {
   title: string;
   description?: string;
   status: string;
+  column?: string; // board column name (independent of status)
   order?: number;
   priority: TaskPriority;
   assignees: string[]; // userIds

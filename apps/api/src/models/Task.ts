@@ -21,6 +21,7 @@ export interface ITask extends Document {
   title: string;
   description?: string;
   status: string;
+  column?: string;
   order: number;
   priority: 'High' | 'Medium' | 'Low';
   assignees: string[]; // Clerk userIds
@@ -64,6 +65,7 @@ const TaskSchema = new Schema<ITask>(
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: '' },
     status: { type: String, required: true, default: 'To Do', trim: true, index: true },
+    column: { type: String, trim: true, default: '', index: true },
     order: { type: Number, default: 0 },
     priority: {
       type: String,

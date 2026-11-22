@@ -78,8 +78,20 @@
 - **Rationale**: Replaces error-prone manual `useEffect` fetching. Provides built-in stale-while-revalidate, automatic refetching, cursor pagination, and instant cache mutation for drag-and-drop Kanban updates.
 
 ### ADR-007: Layered Backend Architecture
-- **Decision**: Strict separation of concerns: `Routes` → `Controllers` → `Services` → `Repositories` → `Models`.
+- **Decision**: Strict separation of concerns: `Routes` → `Controllers` → `Services` → `Repositories` → `Models`, plus scheduled background jobs (`apps/api/src/jobs/`).
 - **Rationale**: Keeps controllers thin, decouples HTTP logic from business logic, and enables independent unit testing of services without mocking Express `req`/`res`.
+
+### ADR-008: Decoupled Board Columns & Task Status
+- **Decision**: Store custom ordered board columns on `Project.columns` (empty by default; auto-creating `"Default Column"` on first task) and store card placement on `Task.column` separately from workflow `Task.status` (`To Do` | `In Progress` | `Done`).
+- **Rationale**: Allows teams to organize Kanban boards and List View tables by workflow stage, discipline, or sprint bucket (`Design`, `Backend`, `QA`) without forcibly mutating a task's completion status when dragging cards between columns.
+
+### ADR-009: Ephemeral 24-Hour File Transfers (Cloudinary + Background Sweeper)
+- **Decision**: Accept all file types up to 25 MB via Multer memory storage → Cloudinary (`image` for safe raster images, `raw` for all other file types), stamp `FileRef.expiresAt = uploadedAt + 24h`, and run `file-cleanup.job.ts` every 15 minutes to destroy expired assets on Cloudinary and soft-delete their `FileRef` records.
+- **Rationale**: Keeps storage footprint predictable, prevents Cloudinary's PDF-as-image `403` restriction, and ensures expired files cleanly degrade to non-clickable placeholders (`410 FILE_EXPIRED`) across chat feeds and Profile Drawers.
+
+### ADR-010: Viewport-Locked Desktop App Shell
+- **Decision**: Lock the authenticated shell (`apps/web/src/app/(app)/layout.tsx`) to `h-screen overflow-hidden` with `Sidebar` at `h-full` and internal scrolling inside each page's main card/container (`flex-1 min-h-0 overflow-y-auto`).
+- **Rationale**: Eliminates double scrollbars and clipped bottom card borders, delivering a crisp desktop-app feel across Dashboard, All Projects, Project Detail tabs, Direct Messages, and Settings.
 
 ---
 
@@ -129,11 +141,11 @@ export const update = async (taskId: string, data: UpdateTaskInput) => {
 
 | State Category | Responsible Tool | Example Use Case |
 |---|---|---|
-| **Server State** | TanStack Query v5 | Projects list, Task cards, Message history |
-| **Real-time Updates** | Socket.io → Query Cache | Instant message insertion, task moves |
-| **Global UI State** | Zustand | Active modal state, sidebar collapsed toggle |
-| **Local Component State** | React `useState` | Hover state, dropdown open, inline inputs |
-| **URL State** | Next.js `useSearchParams` | Active filters, Kanban column view tab |
+| **Server State & Caches** | Custom React Hooks (`useProjects`, `useTasks`, `useTeammates`) with user-scoped SWR-style caches | Instant route switching, optimistic DM sidebar sync (`upsertDmPeerLocally`), drag-and-drop column/task updates |
+| **Real-time Updates** | `SocketContext` + `ChatNotificationContext` (Socket.io Client) | Instant message insertion, typing indicators, online presence, DM deletion (`dm:deleted`), unread counts & toast notifications |
+| **Theme & Appearance** | `ThemeContext` + Zero-FOUC inline script | `light` / `dark` / `system` theme persisted in `localStorage` (`synca_theme`) |
+| **Local Component State** | React `useState` | Modal open states, inline editing (Brief/Goals/Milestones/Column rename), formatting toolbar, search filters |
+| **URL State** | Next.js `useSearchParams` | Active DM (`?dm=`), active project tab (`?tab=conversation`), invite code (`/projects/join?code=`) |
 
 ---
 

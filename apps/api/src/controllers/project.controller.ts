@@ -395,15 +395,33 @@ export async function updateProject(req: Request, res: Response) {
 
     const userRecord = project.members?.find((m) => m.userId === userId);
     const userRole = userId === project.ownerId ? 'Admin' : userRecord?.role;
+    const isMember =
+      userId === project.ownerId ||
+      Boolean(userRecord) ||
+      project.teamMembers?.includes(userId);
 
-    if (userRole !== 'Admin' && userRole !== 'Moderator') {
+    const updates = parseResult.data;
+    const updateKeys = Object.keys(updates).filter(
+      (k) => (updates as Record<string, unknown>)[k] !== undefined
+    );
+    const isBoardLayoutOnlyUpdate =
+      updateKeys.length > 0 &&
+      updateKeys.every((k) => k === 'columns' || k === 'renameColumn');
+
+    if (isBoardLayoutOnlyUpdate) {
+      if (!isMember) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You must be a project member to update board columns' },
+        });
+      }
+    } else if (userRole !== 'Admin' && userRole !== 'Moderator') {
       return res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Only Admins and Moderators can edit project details' },
       });
     }
 
-    const updates = parseResult.data;
     if (updates.name) project.name = updates.name.trim();
     if (updates.description !== undefined) project.description = updates.description.trim();
     if (updates.status) project.status = updates.status;
@@ -411,6 +429,33 @@ export async function updateProject(req: Request, res: Response) {
 
     if (updates.goals) project.goals = updates.goals as any;
     if (updates.milestones) project.milestones = updates.milestones as any;
+    if (updates.columns) {
+      // Deduplicate while preserving exact drag-and-drop column order
+      project.columns = Array.from(
+        new Set(updates.columns.map((c) => c.trim()).filter(Boolean))
+      );
+    }
+
+    if (updates.renameColumn) {
+      const { from, to } = updates.renameColumn;
+      const trimmedTo = to.trim();
+      if (trimmedTo && from !== trimmedTo) {
+        const currentCols = Array.isArray(project.columns) ? [...project.columns] : [];
+        const replaced = currentCols.map((c) => (c === from ? trimmedTo : c));
+        if (!replaced.includes(trimmedTo)) replaced.push(trimmedTo);
+        project.columns = Array.from(new Set(replaced));
+
+        // Migrate all tasks in the renamed column (including legacy empty-column tasks if renaming Default Column)
+        const columnMatch =
+          from === 'Default Column'
+            ? { $in: [from, '', null] }
+            : from;
+        await Task.updateMany(
+          { projectId: project._id, column: columnMatch, deletedAt: null },
+          { $set: { column: trimmedTo } }
+        );
+      }
+    }
 
     await project.save();
 
@@ -724,6 +769,13 @@ export async function removeMember(req: Request, res: Response) {
     project.teamMembers = project.teamMembers.filter((uid) => uid !== targetUserId);
 
     await project.save();
+
+    // Unassign the removed/departed member from all tasks in this project
+    await Task.updateMany(
+      { projectId: project._id, assignees: targetUserId, deletedAt: null },
+      { $pull: { assignees: targetUserId } }
+    );
+
     await evictUserFromProjectRoom(targetUserId, String(project._id));
 
     return res.status(200).json({

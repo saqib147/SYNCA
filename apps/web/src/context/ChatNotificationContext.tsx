@@ -265,16 +265,16 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
             <div
               key={toast.id}
               onClick={() => handleToastClick(toast)}
-              className="pointer-events-auto group relative flex items-start gap-3 p-3.5 rounded-2xl bg-white/95 dark:bg-[#10141e]/95 backdrop-blur-xl border border-zinc-200/90 dark:border-white/[0.12] shadow-2xl hover:shadow-emerald-500/10 hover:border-emerald-500/40 cursor-pointer transition-all animate-in slide-in-from-top-4 duration-300"
+              className="pointer-events-auto group relative flex items-start gap-3 p-3.5 rounded-2xl bg-white/95 dark:bg-[#14171c]/95 backdrop-blur-xl border border-[#e5e7eb] dark:border-white/[0.1] shadow-2xl hover:shadow-[#006c52]/10 hover:border-[#006c52]/40 dark:hover:border-[#66deb4]/40 cursor-pointer transition-all animate-in slide-in-from-top-4 duration-300"
             >
               {/* Avatar or Channel Icon */}
               <div className="relative flex-shrink-0 mt-0.5">
                 {toast.isChannel ? (
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  <div className="w-9 h-9 rounded-xl bg-[#e6f7f1] dark:bg-[#66deb4]/15 border border-[#a7e9d2] dark:border-[#66deb4]/30 text-[#006c52] dark:text-[#66deb4] flex items-center justify-center font-bold">
                     <Hash className="w-4 h-4" />
                   </div>
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden flex items-center justify-center font-bold text-xs text-zinc-800 dark:text-zinc-200 shadow-sm border border-white dark:border-zinc-800">
+                  <div className="w-9 h-9 rounded-full bg-[#e6f7f1] dark:bg-[#1e2127] overflow-hidden flex items-center justify-center font-bold text-xs text-[#006c52] dark:text-[#66deb4] shadow-sm border border-white dark:border-white/[0.08]">
                     {toast.avatarUrl ? (
                       <img src={toast.avatarUrl} alt={toast.title} className="w-full h-full object-cover" />
                     ) : (
@@ -282,7 +282,7 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
                     )}
                   </div>
                 )}
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#66deb4] ring-2 ring-white dark:ring-[#14171c]" />
               </div>
 
               {/* Notification Details */}

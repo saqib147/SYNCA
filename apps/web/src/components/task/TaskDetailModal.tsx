@@ -191,18 +191,18 @@ export function TaskDetailModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+      className="fixed inset-0 z-[9999] bg-black/50 dark:bg-black/65 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="fixed inset-y-0 right-0 z-[10000] w-full max-w-2xl bg-[#11141e] border-l border-zinc-800 text-zinc-100 shadow-2xl flex flex-col h-full transform transition-all duration-300 ease-out animate-in slide-in-from-right"
+        className="fixed inset-y-0 right-0 z-[10000] w-full max-w-2xl bg-white dark:bg-[#111316] border-l border-[#e5e7eb] dark:border-white/[0.08] text-[#191c1d] dark:text-zinc-100 shadow-2xl flex flex-col h-full transform transition-all duration-300 ease-out animate-in slide-in-from-right"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Ambient Top Glow */}
-        <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#8be6c1]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -top-24 -right-24 w-60 h-60 bg-[#66deb4]/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Asana-style Top Action Bar */}
-        <div className="p-4 sm:px-6 border-b border-zinc-800/80 bg-[#161a26]/70 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
+        <div className="p-4 sm:px-6 border-b border-[#e5e7eb] dark:border-white/[0.08] bg-[#f8f9fa]/90 dark:bg-[#15171b]/90 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
           {/* Left: Complete Toggle Button */}
           <div className="flex items-center gap-3">
             <button
@@ -212,12 +212,12 @@ export function TaskDetailModal({
               className={cn(
                 'flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 shadow-sm',
                 task.status === 'Done'
-                  ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                  : 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-400',
+                  ? 'border-[#006c52]/30 bg-[#e6f7f1] text-[#006c52] hover:bg-[#d3f5e8] dark:border-[#66deb4]/40 dark:bg-[#66deb4]/15 dark:text-[#66deb4] dark:hover:bg-[#66deb4]/25'
+                  : 'border-[#bdc9c2] dark:border-white/[0.12] bg-white dark:bg-[#1e2127] text-[#191c1d] dark:text-zinc-300 hover:border-[#006c52] dark:hover:border-[#66deb4]/50 hover:bg-[#e6f7f1]/60 dark:hover:bg-[#66deb4]/10 hover:text-[#006c52] dark:hover:text-[#66deb4]',
                 (!canInteract || isUpdatingStatus) && 'opacity-60 cursor-not-allowed'
               )}
             >
-              <CheckIcon className={cn('w-4 h-4', task.status === 'Done' ? 'text-emerald-400 stroke-[3]' : 'text-zinc-400')} />
+              <CheckIcon className={cn('w-4 h-4', task.status === 'Done' ? 'text-[#006c52] dark:text-[#66deb4] stroke-[3]' : 'text-[#3e4944] dark:text-zinc-400')} />
               <span>{task.status === 'Done' ? 'Completed' : 'Mark Complete'}</span>
             </button>
           </div>
@@ -231,7 +231,7 @@ export function TaskDetailModal({
                   onClose();
                   onEditTask(task);
                 }}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                className="p-2 rounded-xl text-[#3e4944] dark:text-zinc-400 hover:text-[#191c1d] dark:hover:text-white hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors"
                 title="Edit Task"
               >
                 <EditIcon className="w-4 h-4" />
@@ -243,18 +243,18 @@ export function TaskDetailModal({
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-2 rounded-xl text-[#3e4944] dark:text-zinc-400 hover:text-[#ba1a1a] dark:hover:text-rose-400 hover:bg-[#ffdad6]/60 dark:hover:bg-rose-500/10 transition-colors"
                 title="Delete Task"
               >
                 <TrashIcon className="w-4 h-4" />
               </button>
             )}
 
-            <div className="h-4 w-px bg-zinc-800 mx-1" />
+            <div className="h-4 w-px bg-[#e5e7eb] dark:bg-white/[0.08] mx-1" />
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors shrink-0"
+              className="p-2 rounded-xl text-[#3e4944] dark:text-zinc-400 hover:text-[#191c1d] dark:hover:text-white hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors shrink-0"
               title="Close Panel"
             >
               <CloseIcon className="w-5 h-5" />
@@ -263,9 +263,9 @@ export function TaskDetailModal({
         </div>
 
         {/* Drawer Scrollable Body */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-zinc-700">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-[#ffdad6] dark:bg-rose-500/10 border border-[#ba1a1a]/20 dark:border-rose-500/20 text-[#ba1a1a] dark:text-rose-400 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -273,17 +273,17 @@ export function TaskDetailModal({
 
           {/* Project & Priority Badges */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+            <span className="px-2.5 py-0.5 rounded-full bg-[#e6f7f1] dark:bg-[#66deb4]/15 border border-[#a7e9d2] dark:border-[#66deb4]/25 text-[#006c52] dark:text-[#66deb4] text-[11px] font-bold">
               {projectName}
             </span>
             <span
               className={cn(
                 'px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase tracking-wider',
                 task.priority === 'High'
-                  ? 'border-rose-500/40 bg-rose-500/10 text-rose-400'
+                  ? 'border-[#ba1a1a]/25 bg-[#ffdad6] text-[#93000a] dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-400'
                   : task.priority === 'Medium'
-                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                  : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  ? 'border-[#191c1d]/10 bg-[#F0FF7C] text-[#191c1d] dark:border-[#F0FF7C]/30 dark:bg-[#F0FF7C]/15 dark:text-[#F0FF7C]'
+                  : 'border-[#006c52]/20 bg-[#e6f7f1] text-[#006c52] dark:border-[#66deb4]/30 dark:bg-[#66deb4]/15 dark:text-[#66deb4]'
               )}
             >
               {task.priority} Priority
@@ -292,10 +292,10 @@ export function TaskDetailModal({
               className={cn(
                 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold border',
                 task.status === 'Done'
-                  ? 'border-emerald-500/30 bg-emerald-500/20 text-emerald-300'
+                  ? 'border-[#006c52]/20 bg-[#e6f7f1] text-[#006c52] dark:border-[#66deb4]/30 dark:bg-[#66deb4]/15 dark:text-[#66deb4]'
                   : task.status === 'In Progress'
-                  ? 'border-blue-500/30 bg-blue-500/20 text-blue-300'
-                  : 'border-zinc-700 bg-zinc-800 text-zinc-300'
+                  ? 'border-sky-200 bg-[#eef6ff] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-300'
+                  : 'border-[#e5e7eb] bg-[#f8f9fa] text-[#3e4944] dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-zinc-300'
               )}
             >
               {task.status}
@@ -304,17 +304,17 @@ export function TaskDetailModal({
 
           {/* Title */}
           <div>
-            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight leading-snug">
+            <h1 className="text-2xl font-bold text-[#191c1d] dark:text-zinc-100 tracking-tight leading-snug">
               {task.title}
             </h1>
           </div>
 
           {/* Asana-style Properties Table */}
-          <div className="bg-[#171b26] p-4 sm:p-5 rounded-2xl border border-zinc-800 space-y-3.5">
+          <div className="bg-[#f8f9fa] dark:bg-[#15171b] p-4 sm:p-5 rounded-2xl border border-[#e5e7eb] dark:border-white/[0.08] space-y-3.5">
             {/* Status Property */}
             <div className="grid grid-cols-3 items-center gap-2 text-xs">
-              <span className="text-zinc-400 font-medium flex items-center gap-2">
-                <ShieldIcon className="w-4 h-4 text-[#8be6c1]" />
+              <span className="text-[#3e4944] dark:text-zinc-400 font-medium flex items-center gap-2">
+                <ShieldIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                 <span>Status</span>
               </span>
               <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
@@ -326,8 +326,8 @@ export function TaskDetailModal({
                     className={cn(
                       'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
                       task.status === st
-                        ? 'bg-[#8be6c1] text-zinc-950 border-[#8be6c1] shadow-sm font-bold'
-                        : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white',
+                        ? 'bg-[#006c52] dark:bg-[#66deb4] text-white dark:text-[#111316] border-[#006c52] dark:border-[#66deb4] shadow-sm font-bold'
+                        : 'bg-white dark:bg-[#1e2127] border-[#e5e7eb] dark:border-white/[0.08] text-[#3e4944] dark:text-zinc-300 hover:bg-[#e6f7f1]/60 dark:hover:bg-white/[0.1] hover:text-[#191c1d] dark:hover:text-white',
                       (!canInteract || isUpdatingStatus) && 'opacity-60 cursor-not-allowed'
                     )}
                   >
@@ -339,8 +339,8 @@ export function TaskDetailModal({
 
             {/* Assignee Property */}
             <div className="grid grid-cols-3 items-center gap-2 text-xs">
-              <span className="text-zinc-400 font-medium flex items-center gap-2">
-                <UserIcon className="w-4 h-4 text-blue-400" />
+              <span className="text-[#3e4944] dark:text-zinc-400 font-medium flex items-center gap-2">
+                <UserIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                 <span>Assignees</span>
               </span>
               <div className="col-span-2 flex items-center gap-1.5 flex-wrap">
@@ -352,16 +352,16 @@ export function TaskDetailModal({
                     return (
                       <span
                         key={assigneeId}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-200"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1e2127] border border-[#e5e7eb] dark:border-white/[0.08] text-xs font-medium text-[#191c1d] dark:text-zinc-200"
                       >
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="w-2 h-2 rounded-full bg-[#66deb4] shrink-0" />
                         <span className="truncate max-w-[150px]">{nameLabel}</span>
                         {!isSelf && (
                           <Link
                             href={`/chats?dm=${assigneeId}&name=${encodeURIComponent(nameLabel)}&avatar=${encodeURIComponent(m?.imageUrl || '')}`}
                             onClick={onClose}
                             title={`Message ${nameLabel}`}
-                            className="ml-0.5 text-zinc-400 hover:text-emerald-400 transition-colors"
+                            className="ml-0.5 text-[#3e4944] dark:text-zinc-400 hover:text-[#006c52] dark:hover:text-[#66deb4] transition-colors"
                           >
                             <CommentIcon className="w-3 h-3" />
                           </Link>
@@ -370,29 +370,29 @@ export function TaskDetailModal({
                     );
                   })
                 ) : (
-                  <span className="text-xs text-zinc-500 italic">No assignees</span>
+                  <span className="text-xs text-[#3e4944]/60 dark:text-zinc-500 italic">No assignees</span>
                 )}
               </div>
             </div>
 
             {/* Due Date Property */}
             <div className="grid grid-cols-3 items-center gap-2 text-xs">
-              <span className="text-zinc-400 font-medium flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-amber-400" />
+              <span className="text-[#3e4944] dark:text-zinc-400 font-medium flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                 <span>Due Date</span>
               </span>
-              <div className="col-span-2 text-xs font-semibold text-zinc-200">
+              <div className="col-span-2 text-xs font-semibold text-[#191c1d] dark:text-zinc-200">
                 {formattedDueDate}
               </div>
             </div>
 
             {/* Project Property */}
             <div className="grid grid-cols-3 items-center gap-2 text-xs">
-              <span className="text-zinc-400 font-medium flex items-center gap-2">
-                <TagIcon className="w-4 h-4 text-purple-400" />
+              <span className="text-[#3e4944] dark:text-zinc-400 font-medium flex items-center gap-2">
+                <TagIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                 <span>Project</span>
               </span>
-              <div className="col-span-2 text-xs font-semibold text-zinc-200">
+              <div className="col-span-2 text-xs font-semibold text-[#191c1d] dark:text-zinc-200">
                 {projectName}
               </div>
             </div>
@@ -400,9 +400,9 @@ export function TaskDetailModal({
 
           {/* Description Section */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Description</h4>
-            <div className="p-4 rounded-2xl bg-[#171b26] border border-zinc-800 text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed min-h-[90px]">
-              {task.description ? task.description : <span className="text-zinc-500 italic">No description provided.</span>}
+            <h4 className="text-xs font-bold text-[#3e4944] dark:text-zinc-400 uppercase tracking-wider">Description</h4>
+            <div className="p-4 rounded-2xl bg-[#f8f9fa] dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] text-xs text-[#191c1d] dark:text-zinc-300 whitespace-pre-wrap leading-relaxed min-h-[90px]">
+              {task.description ? task.description : <span className="text-[#3e4944]/60 dark:text-zinc-500 italic">No description provided.</span>}
             </div>
           </div>
 
@@ -410,8 +410,8 @@ export function TaskDetailModal({
           {totalSubtasksCount > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                  <SubtaskIcon className="w-4 h-4 text-[#8be6c1]" />
+                <h4 className="text-xs font-bold text-[#3e4944] dark:text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                  <SubtaskIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                   <span>Subtasks ({completedSubtasksCount}/{totalSubtasksCount})</span>
                 </h4>
               </div>
@@ -422,21 +422,21 @@ export function TaskDetailModal({
                     key={idx}
                     onClick={() => canInteract && handleToggleSubtask(idx)}
                     className={cn(
-                      'flex items-center gap-3 p-3 rounded-xl bg-[#171b26] border border-zinc-800/80 transition-all text-xs cursor-pointer',
-                      st.completed ? 'opacity-70 bg-zinc-900/60' : 'hover:border-zinc-700'
+                      'flex items-center gap-3 p-3 rounded-xl bg-[#f8f9fa] dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] transition-all text-xs cursor-pointer',
+                      st.completed ? 'opacity-70 bg-[#f3f3f3] dark:bg-white/[0.02]' : 'hover:border-[#bdc9c2] dark:hover:border-white/[0.15]'
                     )}
                   >
                     <div
                       className={cn(
                         'w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all',
                         st.completed
-                          ? 'bg-emerald-500 border-emerald-500 text-zinc-950'
-                          : 'border-zinc-600'
+                          ? 'bg-[#006c52] dark:bg-[#66deb4] border-[#006c52] dark:border-[#66deb4] text-white dark:text-[#111316]'
+                          : 'border-[#bdc9c2] dark:border-zinc-600'
                       )}
                     >
                       {st.completed && <CheckIcon className="w-3 h-3 stroke-[3]" />}
                     </div>
-                    <span className={cn('text-zinc-200 font-medium', st.completed && 'line-through text-zinc-500')}>
+                    <span className={cn('text-[#191c1d] dark:text-zinc-200 font-medium', st.completed && 'line-through text-[#3e4944]/60 dark:text-zinc-500')}>
                       {st.title}
                     </span>
                   </div>
@@ -446,10 +446,10 @@ export function TaskDetailModal({
           )}
 
           {/* Comments Section */}
-          <div className="space-y-4 pt-4 border-t border-zinc-800">
+          <div className="space-y-4 pt-4 border-t border-[#e5e7eb] dark:border-white/[0.08]">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                <CommentIcon className="w-4 h-4 text-blue-400" />
+              <h4 className="text-xs font-bold text-[#3e4944] dark:text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <CommentIcon className="w-4 h-4 text-[#006c52] dark:text-[#66deb4]" />
                 <span>Comments & Activity ({task.comments?.length || 0})</span>
               </h4>
             </div>
@@ -458,31 +458,31 @@ export function TaskDetailModal({
             <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
               {task.comments && task.comments.length > 0 ? (
                 task.comments.map((comment, idx) => (
-                  <div key={idx} className="p-3.5 rounded-2xl bg-[#171b26] border border-zinc-800 space-y-1.5">
+                  <div key={idx} className="p-3.5 rounded-2xl bg-[#f8f9fa] dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {comment.userAvatar ? (
                           <img
                             src={comment.userAvatar}
                             alt={comment.userName}
-                            className="w-5 h-5 rounded-full object-cover border border-zinc-700"
+                            className="w-5 h-5 rounded-full object-cover border border-[#e5e7eb] dark:border-white/[0.1]"
                           />
                         ) : (
-                          <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center border border-emerald-500/30">
+                          <div className="w-5 h-5 rounded-full bg-[#e6f7f1] dark:bg-[#66deb4]/15 text-[#006c52] dark:text-[#66deb4] text-[10px] font-bold flex items-center justify-center border border-[#a7e9d2] dark:border-[#66deb4]/30">
                             {comment.userName.substring(0, 2).toUpperCase()}
                           </div>
                         )}
-                        <span className="text-xs font-bold text-zinc-200">{comment.userName}</span>
+                        <span className="text-xs font-bold text-[#191c1d] dark:text-zinc-200">{comment.userName}</span>
                       </div>
-                      <span className="text-[10px] text-zinc-500 font-mono">
+                      <span className="text-[10px] text-[#3e4944]/70 dark:text-zinc-500 font-mono">
                         {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-300 pl-7 leading-relaxed">{comment.text}</p>
+                    <p className="text-xs text-[#191c1d]/85 dark:text-zinc-300 pl-7 leading-relaxed">{comment.text}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-zinc-500 italic py-2 text-center bg-[#171b26]/50 rounded-xl border border-zinc-800/50">
+                <p className="text-xs text-[#3e4944]/70 dark:text-zinc-500 italic py-2 text-center bg-[#f8f9fa] dark:bg-[#15171b]/60 rounded-xl border border-[#e5e7eb] dark:border-white/[0.06]">
                   No comments yet. Post an update below.
                 </p>
               )}
@@ -497,12 +497,12 @@ export function TaskDetailModal({
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   maxLength={1000}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#171b26] border border-zinc-700/80 text-zinc-100 text-xs placeholder-zinc-500 focus:outline-none focus:border-[#8be6c1] transition-colors"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#f8f9fa] dark:bg-[#15171b] border border-[#bdc9c2] dark:border-white/[0.1] text-[#191c1d] dark:text-zinc-100 text-xs placeholder-[#3e4944]/60 dark:placeholder-zinc-500 focus:outline-none focus:border-[#006c52] dark:focus:border-[#66deb4] transition-colors"
                 />
                 <button
                   type="submit"
                   disabled={isSubmittingComment || !commentText.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-[#8be6c1] hover:bg-[#78d2ad] text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  className="px-4 py-2.5 rounded-xl bg-[#006c52] hover:bg-[#005742] text-white font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
                   {isSubmittingComment ? (
                     <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
@@ -519,9 +519,9 @@ export function TaskDetailModal({
         </div>
 
         {/* Drawer Footer */}
-        <div className="p-3.5 px-6 border-t border-zinc-800 bg-[#0f121a] flex items-center justify-between gap-3 shrink-0">
-          <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
-            <ShieldIcon className="w-3.5 h-3.5 text-zinc-400" />
+        <div className="p-3.5 px-6 border-t border-[#e5e7eb] dark:border-white/[0.08] bg-[#f8f9fa] dark:bg-[#15171b] flex items-center justify-between gap-3 shrink-0">
+          <div className="text-[11px] text-[#3e4944] dark:text-zinc-500 flex items-center gap-1.5">
+            <ShieldIcon className="w-3.5 h-3.5 text-[#006c52] dark:text-[#66deb4]" />
             <span>
               {canEditOrDelete
                 ? 'Admin / Creator Permissions'
@@ -534,7 +534,7 @@ export function TaskDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors"
+            className="px-4 py-1.5 rounded-xl bg-[#e7e8e9] dark:bg-[#1e2127] hover:bg-[#dce0e2] dark:hover:bg-white/[0.1] text-[#191c1d] dark:text-zinc-300 text-xs font-semibold transition-colors"
           >
             Close
           </button>

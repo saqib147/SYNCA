@@ -12,6 +12,7 @@ export const createTaskSchema = z.object({
   title: z.string().min(1, 'Task title is required').max(280),
   description: z.string().max(2000).optional(),
   status: z.string().min(1).default('To Do'),
+  column: z.string().trim().max(80).optional(),
   order: z.number().optional().default(0),
   priority: z.enum(['High', 'Medium', 'Low']).default('Medium'),
   assignees: z.array(z.string()).optional().default([]),
@@ -26,10 +27,15 @@ export const createTaskSchema = z.object({
 
 export const updateTaskSchema = createTaskSchema.partial();
 
-export const moveTaskSchema = z.object({
-  newStatus: z.string().min(1, 'New status is required'),
-  newOrder: z.number().min(0).default(0),
-});
+export const moveTaskSchema = z
+  .object({
+    newColumn: z.string().trim().min(1).max(80).optional(),
+    newStatus: z.string().min(1).optional(),
+    newOrder: z.number().min(0).default(0),
+  })
+  .refine((data) => Boolean(data.newColumn || data.newStatus), {
+    message: 'Either newColumn or newStatus is required',
+  });
 
 export const addCommentSchema = z.object({
   text: z.string().min(1, 'Comment text cannot be empty').max(2000),

@@ -34,6 +34,7 @@ export const createProjectSchema = z.object({
   members: z.array(projectTeamMemberSchema).optional().default([]),
   goals: z.array(projectGoalSchema).optional().default([]),
   milestones: z.array(projectMilestoneSchema).optional().default([]),
+  columns: z.array(z.string().trim().min(1).max(80)).optional().default([]),
 });
 
 export const joinProjectSchema = z.object({
@@ -55,7 +56,17 @@ export const addProjectMemberSchema = z
   });
 
 // Explicitly omit members and teamMembers so PATCH /projects/:id cannot escalate privileges
-export const updateProjectSchema = createProjectSchema.omit({ members: true, teamMembers: true }).partial();
+export const updateProjectSchema = createProjectSchema
+  .omit({ members: true, teamMembers: true })
+  .partial()
+  .extend({
+    renameColumn: z
+      .object({
+        from: z.string().min(1),
+        to: z.string().trim().min(1).max(80),
+      })
+      .optional(),
+  });
 
 export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export type UpdateProjectInput = z.input<typeof updateProjectSchema>;

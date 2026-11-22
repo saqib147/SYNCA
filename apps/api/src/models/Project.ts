@@ -31,6 +31,7 @@ export interface IProject extends Document {
   privacy: 'Private' | 'Public';
   goals: IProjectGoal[];
   milestones: IProjectMilestone[];
+  columns: string[];
   teamMembers: string[]; // Clerk userIds
   members: IProjectMember[];
   connectedFiles: string[];
@@ -95,6 +96,7 @@ const ProjectSchema = new Schema<IProject>(
     },
     goals: [ProjectGoalSchema],
     milestones: [ProjectMilestoneSchema],
+    columns: { type: [String], default: [] },
     teamMembers: [{ type: String, trim: true }],
     members: [
       {

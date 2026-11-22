@@ -136,19 +136,19 @@ export function useTasks(projectId?: string) {
     [withAuth]
   );
 
-  // Move Task (with optimistic UI update for Kanban drag-and-drop)
+  // Move Task between board columns (decoupled from status — never alters task.status)
   const moveTask = useCallback(
-    async (id: string, newStatus: string, newOrder: number): Promise<void> => {
+    async (id: string, newColumn: string, newOrder: number): Promise<void> => {
       // Optimistic update
       setTasks((prev) =>
         prev.map((t) =>
-          t._id === id ? { ...t, status: newStatus, order: newOrder } : t
+          t._id === id ? { ...t, column: newColumn, order: newOrder } : t
         )
       );
 
       try {
         await withAuth((token) =>
-          moveTaskApi(id, { newStatus, newOrder }, token)
+          moveTaskApi(id, { newColumn, newOrder }, token)
         );
         notifyTasksChanged();
       } catch (err) {

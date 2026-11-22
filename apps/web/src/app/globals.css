@@ -5,8 +5,8 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 24, 24, 27;
-  --background: #f4f4f5;
+  --foreground-rgb: 25, 28, 29;
+  --background: #f3f3f3;
 }
 
 .dark {
@@ -88,13 +88,13 @@ h1, h2, h3, h4, h5, h6 {
 
 @layer utilities {
   .glass-card {
-    @apply bg-white dark:bg-[#12161f]/65 backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.08] shadow-sm;
+    @apply bg-white dark:bg-[#111316]/85 backdrop-blur-xl border border-[#e5e7eb] dark:border-white/[0.08] shadow-sm;
   }
   .glass-card-subtle {
-    @apply bg-zinc-50 dark:bg-white/[0.04] backdrop-blur-md border border-zinc-200/80 dark:border-white/[0.08];
+    @apply bg-[#f8f9fa] dark:bg-white/[0.04] backdrop-blur-md border border-[#e5e7eb] dark:border-white/[0.08];
   }
   .glass-flyout {
-    @apply bg-white/95 dark:bg-[#10141e]/90 backdrop-blur-2xl border border-zinc-200 dark:border-white/[0.12] shadow-2xl;
+    @apply bg-white/95 dark:bg-[#14171c]/95 backdrop-blur-2xl border border-[#e5e7eb] dark:border-white/[0.12] shadow-2xl;
   }
 }
 

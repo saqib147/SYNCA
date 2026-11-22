@@ -57,6 +57,7 @@ Top-level collaboration containers.
     progress: Number,
     date: Date
   }],
+  columns: [String],     // Ordered board columns (empty by default; decoupled from Task.status)
   teamMembers: [String], // Array of Clerk userIds for fast indexed lookup
   members: [{
     userId: String,      // Clerk ID
@@ -82,8 +83,9 @@ Tasks assigned within projects or personal private tasks.
   createdBy: String,     // Clerk userId
   title: String,         // Task title (required)
   description: String,
-  status: String,        // 'To Do' | 'In Progress' | 'Done' (+ Custom)
-  order: Number,         // Ordering index for Kanban drag-and-drop
+  status: String,        // 'To Do' | 'In Progress' | 'Done' (independent of board column)
+  column: String,        // Board column name (e.g. 'Default Column' or custom column)
+  order: Number,         // Ordering index within its board column
   priority: String,      // 'High' | 'Medium' | 'Low'
   assignees: [String],   // Array of Clerk userIds
   dueDate: Date | null,
@@ -136,12 +138,14 @@ Tasks assigned within projects or personal private tasks.
 {
   _id: ObjectId,
   uploaderId: String,
-  projectId: ObjectId | null, // Project scope when uploaded in a channel; null for DM/personal
+  projectId: ObjectId | null,      // Project scope when uploaded in a channel; null for DM/personal
   cloudinaryPublicId: String,
   cloudinaryUrl: String,
+  cloudinaryResourceType: String,  // 'image' (safe raster images) | 'raw' (all other file types)
   fileName: String,
-  fileSize: Number,
-  fileType: String,
+  fileSize: Number,                // Max 25 MB
+  fileType: String,                // MIME type
+  expiresAt: Date,                 // uploadedAt + 24 hours; swept every 15 min by file-cleanup.job
   deletedAt: Date | null,
   uploadedAt: Date
 }
@@ -167,12 +171,13 @@ Tasks assigned within projects or personal private tasks.
 
 ### `Project` Indexes
 - `{ joinCode: 1 }` (unique)
-- `{ slug: 1 }` (unique)
+- `{ slug: 1 }` (unique; legacy `workspaceId_1_slug_1` index is auto-dropped on startup in `mongodb.ts`)
 - `{ ownerId: 1 }`
 - `{ 'members.userId': 1 }`
 - `{ deletedAt: 1, status: 1 }`
 
 ### `Task` Indexes
+- `{ projectId: 1, deletedAt: 1, column: 1, order: 1 }`
 - `{ projectId: 1, deletedAt: 1, status: 1, order: 1 }`
 - `{ assignees: 1, deletedAt: 1 }`
 - `{ createdBy: 1, isPrivate: 1, deletedAt: 1 }`
@@ -186,6 +191,7 @@ Tasks assigned within projects or personal private tasks.
 ### `FileRef` Indexes
 - `{ projectId: 1, deletedAt: 1 }`
 - `{ uploaderId: 1 }`
+- `{ deletedAt: 1, expiresAt: 1 }` (used by 15-minute `file-cleanup.job` sweeper)
 
 ### `Notification` Indexes
 - `{ userId: 1, read: 1, createdAt: -1 }`

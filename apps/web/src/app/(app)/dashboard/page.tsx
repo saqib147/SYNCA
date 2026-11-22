@@ -24,11 +24,11 @@ import { Task } from '@synca/types';
 import { cn } from '@/lib/utils';
 
 const PROJECT_ICON_ACCENTS = [
-  'bg-rose-500/15 text-rose-500',
-  'bg-amber-600/15 text-amber-700 dark:text-amber-400',
-  'bg-blue-600/15 text-blue-600 dark:text-blue-400',
-  'bg-sky-500/15 text-sky-600 dark:text-sky-400',
-  'bg-teal-500/15 text-teal-600 dark:text-teal-400',
+  'bg-[#e6f7f1] text-[#006c52] dark:bg-[#66deb4]/15 dark:text-[#66deb4]',
+  'bg-[#F0FF7C] text-[#191c1d] dark:bg-[#F0FF7C]/15 dark:text-[#F0FF7C]',
+  'bg-[#eef6ff] text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+  'bg-[#e7e8e9] text-[#191c1d] dark:bg-white/[0.08] dark:text-zinc-200',
+  'bg-[#ffdad6] text-[#93000a] dark:bg-rose-500/15 dark:text-rose-300',
 ];
 
 export default function DashboardPage() {
@@ -190,9 +190,9 @@ export default function DashboardPage() {
   }, [validTasks]);
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="h-full flex flex-col gap-5 overflow-hidden">
       {/* ─── Top Greeting & 3 KPI Cards Banner (Figma 27:673) ─── */}
-      <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] px-7 py-5 border border-black/[0.04] dark:border-white/[0.08] flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <div className="shrink-0 bg-white dark:bg-[#111316] rounded-[20px] px-7 py-5 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
         {/* Two-line Funnel Display Greeting */}
         <div className="font-['Funnel_Display'] font-normal text-[#3e4944] dark:text-zinc-100 leading-[1.05]">
           <h1 className="text-[32px] sm:text-[40px] tracking-tight">{greeting}</h1>
@@ -202,8 +202,8 @@ export default function DashboardPage() {
         {/* Right: 3 Exact KPI Cards + ThemeToggle */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* KPI 1: Task Completion */}
-          <div className="w-[136px] h-[116px] bg-white dark:bg-white/[0.04] border border-[#c9c9c9] dark:border-white/[0.1] rounded-[15px] p-3 flex flex-col justify-between">
-            <div className="w-9 h-9 rounded-[10px] bg-[#79deba]/20 flex items-center justify-center text-[#036867] dark:text-[#66deb4]">
+          <div className="w-[136px] h-[116px] bg-white dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] rounded-[15px] p-3 flex flex-col justify-between">
+            <div className="w-9 h-9 rounded-[10px] bg-[#e6f7f1] dark:bg-[#66deb4]/15 flex items-center justify-center text-[#006c52] dark:text-[#66deb4]">
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
           </div>
 
           {/* KPI 2: Active Projects */}
-          <div className="w-[136px] h-[116px] bg-white dark:bg-white/[0.04] border border-[#c9c9c9] dark:border-white/[0.1] rounded-[15px] p-3 flex flex-col justify-between">
+          <div className="w-[136px] h-[116px] bg-white dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] rounded-[15px] p-3 flex flex-col justify-between">
             <div className="w-9 h-9 rounded-[12px] bg-[#e7e8e9] dark:bg-white/[0.08] flex items-center justify-center text-[#191c1d] dark:text-zinc-200">
               <FolderKanban className="w-5 h-5" />
             </div>
@@ -232,7 +232,7 @@ export default function DashboardPage() {
           </div>
 
           {/* KPI 3: Team Velocity */}
-          <div className="w-[136px] h-[116px] bg-white dark:bg-white/[0.04] border border-[#c9c9c9] dark:border-white/[0.1] rounded-[15px] p-3 flex flex-col justify-between">
+          <div className="w-[136px] h-[116px] bg-white dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] rounded-[15px] p-3 flex flex-col justify-between">
             <div className="w-9 h-9 rounded-[12px] bg-[#e7e8e9] dark:bg-white/[0.08] flex items-center justify-center text-[#191c1d] dark:text-zinc-200">
               <Gauge className="w-5 h-5" />
             </div>
@@ -249,23 +249,23 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="ml-1 self-start">
+          {/* <div className="ml-1 self-start">
             <ThemeToggle />
-          </div>
+          </div> */}
         </div>
       </div>
 
       {/* ─── Main 3-Column Bento Grid (Matches Figma 27:594) ─── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-3 gap-5 items-stretch overflow-y-auto xl:overflow-hidden pr-1 xl:pr-0">
         {/* Column 1: Tall Task Status Card (Figma 27:679) */}
-        <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] p-6 border border-black/[0.04] dark:border-white/[0.08] flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.03)] min-h-[760px]">
-          <div className="flex items-center justify-between gap-3 pb-4 border-b border-zinc-200/80 dark:border-white/[0.08]">
-            <h2 className="text-[18px] font-normal text-black dark:text-zinc-100 font-['Funnel_Display'] shrink-0">
+        <div className="bg-white dark:bg-[#111316] rounded-[20px] p-6 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.03)] min-h-[420px] xl:min-h-0 xl:h-full overflow-hidden">
+          <div className="shrink-0 flex items-center justify-between gap-3 pb-4 border-b border-[#e5e7eb] dark:border-white/[0.08]">
+            <h2 className="text-[18px] font-normal text-[#191c1d] dark:text-zinc-100 font-['Funnel_Display'] shrink-0">
               Task Status
             </h2>
 
             {/* Segmented Pill Switcher (Upcoming / Overdue / Completed) */}
-            <div className="flex items-center bg-[#bebebe]/20 dark:bg-white/[0.06] border border-[#d9d9d9] dark:border-white/[0.08] rounded-full p-1 gap-0.5">
+            <div className="flex items-center bg-[#f3f3f3] dark:bg-white/[0.06] border border-[#e5e7eb] dark:border-white/[0.08] rounded-full p-1 gap-0.5">
               {(['Upcoming', 'Overdue', 'Completed'] as const).map((tab) => {
                 const isSelected = activeTab === tab;
                 return (
@@ -276,8 +276,8 @@ export default function DashboardPage() {
                     className={cn(
                       'px-3 py-1 rounded-full text-[12px] font-normal transition-all',
                       isSelected
-                        ? 'bg-gradient-to-r from-[#036867] to-[#79deba] text-white shadow-[inset_0px_2px_6px_rgba(255,255,255,0.5)]'
-                        : 'text-[#363636]/55 dark:text-zinc-400 hover:text-black dark:hover:text-white'
+                        ? 'bg-gradient-to-r from-[#006c52] to-[#66deb4] text-white shadow-[inset_0px_2px_6px_rgba(255,255,255,0.45)]'
+                        : 'text-[#3e4944]/75 dark:text-zinc-400 hover:text-[#191c1d] dark:hover:text-white'
                     )}
                   >
                     {tab}
@@ -311,20 +311,20 @@ export default function DashboardPage() {
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#79deba]/15 flex items-center justify-center text-[#036867] dark:text-[#66deb4]">
+                <div className="w-12 h-12 rounded-2xl bg-[#e6f7f1] dark:bg-[#66deb4]/15 flex items-center justify-center text-[#006c52] dark:text-[#66deb4]">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                  <p className="text-sm font-medium text-[#191c1d] dark:text-zinc-200">
                     No {activeTab.toLowerCase()} tasks
                   </p>
-                  <p className="text-xs text-zinc-400 mt-1 max-w-[220px]">
+                  <p className="text-xs text-[#3e4944] dark:text-zinc-400 mt-1 max-w-[220px]">
                     Tasks assigned to you across your projects appear here automatically.
                   </p>
                 </div>
                 <Link
                   href="/projects"
-                  className="px-3.5 py-1.5 rounded-full border border-[#898989]/60 text-xs text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/[0.06] transition-colors"
+                  className="px-3.5 py-1.5 rounded-full border border-[#bdc9c2] dark:border-white/[0.15] text-xs text-[#191c1d] dark:text-zinc-200 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors"
                 >
                   Browse Projects
                 </Link>
@@ -334,31 +334,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Column 2: Completed Tasks + Private Task */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5 xl:h-full xl:min-h-0">
           {/* Completed Tasks Card (Figma 27:674) */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] p-6 border border-black/[0.04] dark:border-white/[0.08] flex flex-col justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)] min-h-[370px]">
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-[18px] font-normal text-black dark:text-zinc-100 font-['Funnel_Display']">
+          <div className="bg-white dark:bg-[#111316] rounded-[20px] p-6 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col justify-between shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex-1 min-h-[260px] xl:min-h-0 overflow-hidden">
+            <div className="shrink-0 flex items-start justify-between gap-2">
+              <h2 className="text-[18px] font-normal text-[#191c1d] dark:text-zinc-100 font-['Funnel_Display']">
                 Completed Tasks
               </h2>
-              <p className="text-[12px] font-light text-black/80 dark:text-zinc-400 text-right max-w-[130px] leading-tight">
+              <p className="text-[12px] font-light text-[#3e4944] dark:text-zinc-400 text-right max-w-[130px] leading-tight">
                 {weeklyCompletedCount} Tasks Completed this Week
               </p>
             </div>
 
             {/* 7 Iconic Vertical Pill Strips (Mon–Sun) */}
-            <div className="grid grid-cols-7 gap-2.5 pt-6 items-end flex-1">
+            <div className="grid grid-cols-7 gap-2.5 pt-4 items-stretch flex-1 min-h-0">
               {weekdayStats.map(({ day, count }) => {
                 const isActiveDay = count > 0;
                 return (
-                  <div key={day} className="flex flex-col items-center gap-2.5">
+                  <div key={day} className="flex flex-col items-center gap-2 min-h-0">
                     <div
                       title={`${day}: ${count} completed task${count !== 1 ? 's' : ''}`}
                       className={cn(
-                        'w-full h-[220px] rounded-[66px] transition-transform duration-200 hover:scale-[1.03] flex items-start justify-center pt-3 relative',
+                        'w-full flex-1 min-h-[110px] max-h-[210px] rounded-[66px] transition-transform duration-200 hover:scale-[1.03] flex items-start justify-center pt-3 relative',
                         isActiveDay
-                          ? 'bg-gradient-to-b from-[#66deb4] to-[#4ba384] shadow-[inset_0px_4px_10px_0px_rgba(255,255,255,0.73)]'
-                          : 'bg-gradient-to-b from-[#66deb4]/45 to-[#4ba384]/45 dark:from-[#66deb4]/20 dark:to-[#4ba384]/20'
+                          ? 'bg-gradient-to-b from-[#66deb4] to-[#006c52] shadow-[inset_0px_4px_10px_0px_rgba(255,255,255,0.65)]'
+                          : 'bg-gradient-to-b from-[#66deb4]/40 to-[#006c52]/25 dark:from-[#66deb4]/20 dark:to-[#006c52]/20'
                       )}
                     >
                       {count > 0 && (
@@ -367,7 +367,7 @@ export default function DashboardPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-[13px] font-light text-black/80 dark:text-zinc-400">
+                    <span className="text-[13px] font-light text-[#3e4944] dark:text-zinc-400 shrink-0">
                       {day}
                     </span>
                   </div>
@@ -377,15 +377,15 @@ export default function DashboardPage() {
           </div>
 
           {/* Private Task Card (Figma 27:678) */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] p-6 border border-black/[0.04] dark:border-white/[0.08] flex flex-col flex-1 min-h-[366px] shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[18px] font-normal text-black dark:text-zinc-100 font-['Funnel_Display']">
+          <div className="bg-white dark:bg-[#111316] rounded-[20px] p-6 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col flex-1 min-h-[240px] xl:min-h-0 overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+            <div className="shrink-0 flex items-center justify-between mb-3">
+              <h2 className="text-[18px] font-normal text-[#191c1d] dark:text-zinc-100 font-['Funnel_Display']">
                 Private Task
               </h2>
               <button
                 type="button"
                 onClick={() => setIsPrivateTaskModalOpen(true)}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-[#898989]/70 dark:border-white/[0.15] text-[12px] text-black dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/[0.06] transition-colors font-['Funnel_Display']"
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-[#bdc9c2] dark:border-white/[0.15] text-[12px] text-[#191c1d] dark:text-zinc-200 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors font-['Funnel_Display']"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add</span>
@@ -441,24 +441,24 @@ export default function DashboardPage() {
         </div>
 
         {/* Column 3: Ongoing Projects + Recent / Unread Chats */}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5 xl:h-full xl:min-h-0">
           {/* Ongoing Projects Card (Figma 27:676) */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] p-6 border border-black/[0.04] dark:border-white/[0.08] flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.03)] min-h-[370px]">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[18px] font-normal text-black dark:text-zinc-100 font-['Funnel_Display']">
+          <div className="bg-white dark:bg-[#111316] rounded-[20px] p-6 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex-1 min-h-[260px] xl:min-h-0 overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between mb-4">
+              <h2 className="text-[18px] font-normal text-[#191c1d] dark:text-zinc-100 font-['Funnel_Display']">
                 Ongoing Projects
               </h2>
               <button
                 type="button"
                 onClick={() => setIsCreateProjectOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#898989] dark:border-white/[0.2] text-[14px] text-black dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-white/[0.06] transition-colors font-['Funnel_Display']"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#bdc9c2] dark:border-white/[0.15] text-[14px] text-[#191c1d] dark:text-zinc-200 hover:bg-[#f3f3f3] dark:hover:bg-white/[0.06] transition-colors font-['Funnel_Display']"
               >
                 <span>New</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="space-y-4 flex-1">
+            <div className="space-y-3.5 flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-none">
               {projects.length > 0 ? (
                 projects.slice(0, 5).map((proj, idx) => (
                   <Link
@@ -475,10 +475,10 @@ export default function DashboardPage() {
                       {proj.name.substring(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-[20px] font-normal text-black dark:text-zinc-100 leading-tight truncate font-['Funnel_Display'] group-hover:text-[#036867] dark:group-hover:text-[#66deb4] transition-colors">
+                      <h4 className="text-[20px] font-normal text-[#191c1d] dark:text-zinc-100 leading-tight truncate font-['Funnel_Display'] group-hover:text-[#006c52] dark:group-hover:text-[#66deb4] transition-colors">
                         {proj.name}
                       </h4>
-                      <p className="text-[13px] font-normal text-black/50 dark:text-zinc-400 font-['Funnel_Display'] truncate mt-0.5">
+                      <p className="text-[13px] font-normal text-[#3e4944] dark:text-zinc-400 font-['Funnel_Display'] truncate mt-0.5">
                         {proj.status} · Code {proj.joinCode}
                       </p>
                     </div>
@@ -486,13 +486,13 @@ export default function DashboardPage() {
                 ))
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center py-10 text-center space-y-2">
-                  <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  <p className="text-xs font-medium text-[#3e4944] dark:text-zinc-300">
                     No active projects yet
                   </p>
                   <button
                     type="button"
                     onClick={() => setIsCreateProjectOpen(true)}
-                    className="px-3.5 py-1.5 rounded-full bg-[#d8f870] text-zinc-950 text-xs font-semibold"
+                    className="px-3.5 py-1.5 rounded-full bg-[#006c52] hover:bg-[#005742] text-white text-xs font-semibold transition-colors"
                   >
                     + Create Project
                   </button>
@@ -502,16 +502,16 @@ export default function DashboardPage() {
           </div>
 
           {/* Bottom-Right: Recent / Unread Chats Card (Figma 27:677 & 76:287) */}
-          <div className="bg-white dark:bg-[#10141e]/65 dark:backdrop-blur-xl rounded-[20px] p-5 border border-black/[0.04] dark:border-white/[0.08] flex flex-col flex-1 min-h-[366px] shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+          <div className="bg-white dark:bg-[#111316] rounded-[20px] p-5 border border-[#e5e5e5] dark:border-white/[0.08] flex flex-col flex-1 min-h-[240px] xl:min-h-0 overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             {teammates.length > 0 ? (
-              <div className="space-y-2.5 flex-1 overflow-y-auto pr-0.5 scrollbar-none">
+              <div className="space-y-2.5 flex-1 min-h-0 overflow-y-auto pr-0.5 scrollbar-none">
                 {teammates.slice(0, 5).map((peer) => {
                   const dmUnread = unreadCounts[`dm_${peer.userId}`] || 0;
                   return (
                     <Link
                       key={peer.userId}
                       href={`/chats?dm=${peer.userId}&name=${encodeURIComponent(peer.name)}&avatar=${encodeURIComponent(peer.avatarUrl || '')}`}
-                      className="h-[57px] px-3 rounded-[7px] bg-[#bebebe]/25 dark:bg-white/[0.04] border border-black/15 dark:border-white/[0.08] hover:border-[#4ba384] flex items-center gap-3 transition-colors group"
+                      className="h-[57px] px-3 rounded-[10px] bg-[#f8f9fa] dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] hover:border-[#006c52] dark:hover:border-[#66deb4] flex items-center gap-3 transition-colors group"
                     >
                       {/* Avatar + Name */}
                       <div className="flex items-center gap-2.5 min-w-0 w-[42%] shrink-0">
@@ -522,35 +522,35 @@ export default function DashboardPage() {
                             className="w-9 h-9 rounded-full object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-[#17181c] text-white text-xs font-bold flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-[#e6f7f1] dark:bg-[#1e2127] border border-[#a7e9d2] dark:border-white/[0.1] text-[#006c52] dark:text-[#66deb4] text-xs font-bold flex items-center justify-center shrink-0">
                             {peer.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="text-[13px] font-normal text-black dark:text-zinc-100 truncate leading-tight">
+                          <p className="text-[13px] font-normal text-[#191c1d] dark:text-zinc-100 truncate leading-tight">
                             {peer.name}
                           </p>
-                          <p className="text-[10px] text-[#363636]/70 dark:text-zinc-400 truncate leading-tight mt-0.5">
+                          <p className="text-[10px] text-[#3e4944] dark:text-zinc-400 truncate leading-tight mt-0.5">
                             {peer.sharedProjects?.[0] || 'Direct Message'}
                           </p>
                         </div>
                       </div>
 
                       {/* Vertical hairline divider (Figma imgLine9) */}
-                      <div className="w-px h-6 bg-black/15 dark:bg-white/15 shrink-0" />
+                      <div className="w-px h-6 bg-[#e5e7eb] dark:bg-white/15 shrink-0" />
 
                       {/* Last message preview */}
-                      <p className="text-[10px] text-black dark:text-zinc-300 truncate flex-1">
+                      <p className="text-[10px] text-[#191c1d] dark:text-zinc-300 truncate flex-1">
                         {peer.lastMessagePreview || 'Start a conversation…'}
                       </p>
 
-                      {/* Unread / Open Badge (Figma #a7dac9 rounded-[7px]) */}
+                      {/* Unread / Open Badge */}
                       {dmUnread > 0 ? (
-                        <span className="px-2 py-0.5 rounded-[7px] bg-[#a7dac9] text-black text-[9px] font-medium shrink-0">
+                        <span className="px-2 py-0.5 rounded-[7px] bg-[#e6f7f1] dark:bg-[#66deb4]/20 text-[#006c52] dark:text-[#66deb4] text-[9px] font-semibold shrink-0">
                           Unread{dmUnread > 1 ? ` (${dmUnread})` : ''}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-[7px] bg-white/70 dark:bg-white/[0.08] text-zinc-500 dark:text-zinc-400 text-[9px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="px-2 py-0.5 rounded-[7px] bg-white dark:bg-white/[0.08] text-[#3e4944] dark:text-zinc-400 text-[9px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                           Open
                         </span>
                       )}
@@ -560,13 +560,13 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center space-y-2 py-8">
-                <div className="w-10 h-10 rounded-2xl bg-[#a7dac9]/30 flex items-center justify-center text-[#036867] dark:text-[#66deb4]">
+                <div className="w-10 h-10 rounded-2xl bg-[#e6f7f1] dark:bg-[#66deb4]/15 flex items-center justify-center text-[#006c52] dark:text-[#66deb4]">
                   <MessageSquare className="w-5 h-5" />
                 </div>
-                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                <p className="text-xs font-medium text-[#191c1d] dark:text-zinc-300">
                   No recent conversations yet
                 </p>
-                <p className="text-[11px] text-zinc-400 max-w-[220px]">
+                <p className="text-[11px] text-[#3e4944] dark:text-zinc-400 max-w-[220px]">
                   Recent direct messages and unread chats will appear here.
                 </p>
               </div>
@@ -583,7 +583,7 @@ export default function DashboardPage() {
         projectName={
           selectedTask?.projectId
             ? projects.find((p) => String(p._id) === String(selectedTask.projectId))?.name ||
-              'Active Project'
+            'Active Project'
             : 'Personal Task'
         }
         userProjectRole={(() => {

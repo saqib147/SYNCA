@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import {
+  deleteDmConversation,
   deleteMessage,
   getChannelMessages,
   getDmMessages,
@@ -14,6 +15,7 @@ router.use(requireAuth);
 router.get('/channel/:projectId', getChannelMessages);
 router.get('/dm/:userId', getDmMessages);
 router.post('/', sendMessage);
+router.delete('/dm/:peerId', deleteDmConversation);
 router.delete('/:id', deleteMessage);
 
 export default router;

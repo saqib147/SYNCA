@@ -79,6 +79,11 @@ export function ProjectConversationTab({
     return groupMessages(visibleMessages, userId || undefined);
   }, [visibleMessages, userId]);
 
+  const activeMemberIds = useMemo(
+    () => new Set(members.map((m) => m.userId)),
+    [members]
+  );
+
   const slugChannel = projectName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -88,7 +93,7 @@ export function ProjectConversationTab({
   const extraMembers = Math.max(0, members.length - 3);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-250px)] min-h-[540px] rounded-[12px] bg-white dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 h-full rounded-[12px] bg-white dark:bg-[#15171b] border border-[#e5e7eb] dark:border-white/[0.08] overflow-hidden">
       {/* Figma 80:875 Channel Header */}
       <div className="h-[58px] px-5 sm:px-6 border-b border-[#e5e7eb] dark:border-white/[0.08] flex items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -138,7 +143,7 @@ export function ProjectConversationTab({
       </div>
 
       {/* Message Stream */}
-      <div className="flex-1 px-5 sm:px-7 py-5 overflow-y-auto space-y-4 scrollbar-thin">
+      <div className="flex-1 px-5 sm:px-7 py-4 overflow-y-auto space-y-0 scrollbar-thin">
         {hasMore && !searchQuery && (
           <div className="flex justify-center pb-2">
             <button
@@ -199,9 +204,13 @@ export function ProjectConversationTab({
                   senderAvatar={senderAvatar}
                   isFirstInGroup={item.isFirstInGroup}
                   isLastInGroup={item.isLastInGroup}
+                  isFormerMember={
+                    members.length > 0 && !activeMemberIds.has(msg.senderId)
+                  }
                   onReact={(emoji) => reactToMessage(msg._id || msg.id || '', emoji)}
                   onDelete={() => deleteMessage(msg._id || msg.id || '')}
                   canDelete={isOwn || canModerate}
+                  variant="channel"
                 />
               </React.Fragment>
             );
@@ -228,6 +237,7 @@ export function ProjectConversationTab({
             onTyping={setTyping}
             placeholder={`Message #${slugChannel}`}
             projectId={projectId}
+            variant="channel"
           />
         </div>
         <p className="text-center text-[11px] text-[#3e4944]/70 dark:text-zinc-500 mt-1.5">

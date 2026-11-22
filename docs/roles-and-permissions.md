@@ -22,8 +22,9 @@ There is **no** Room / Workspace role layer. Legacy roles (`Owner`, `Manager`, `
 | **Share / Copy Project `joinCode`** | ✅ Yes | ✅ Yes | ❌ No |
 | **Reset Project `joinCode`** | ✅ Yes | ❌ No | ❌ No |
 | **Edit Project Metadata & Goals / Milestones** | ✅ Yes | ✅ Yes | ❌ Read-Only |
+| **Reorder / Rename / Add / Remove Empty Board Columns** | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Promote / Demote Member Roles (`Admin`, `Moderator`, `Member`)** | ✅ Yes | ❌ No | ❌ No |
-| **Remove Members from Project** | ✅ Yes | ❌ No | ❌ No *(Can leave project)* |
+| **Remove Members from Project** | ✅ Yes *(auto-unassigns tasks)* | ❌ No | ❌ No *(Can leave project; auto-unassigns tasks)* |
 | **Delete Project (Cascade Soft Delete)** | ✅ Yes | ❌ No | ❌ No |
 | **Soft-delete others' channel messages** | ✅ Yes | ✅ Yes | ❌ No |
 
@@ -82,8 +83,9 @@ Task actions are governed by the user's project role and their relationship to t
 | **Delete own message** | ✅ | ✅ | ✅ | ❌ |
 | **Delete others' channel messages** | ✅ | ✅ | ❌ | ❌ |
 | **Delete others' DM messages** | ❌ | ❌ | ❌ | ❌ |
+| **Delete entire 1:1 DM conversation** | ✅ *(participant)* | ✅ *(participant)* | ✅ *(participant)* | ❌ |
 
-Phase 4 MVP uses **one default channel per project** (`channelId = projectId`). Named multi-channels are deferred.
+Phase 4 MVP uses **one default channel per project** (`channelId = projectId`). Named multi-channels are deferred. When a member leaves or is removed from a project, they are automatically unassigned from all active project tasks and their historical channel messages remain attributed with a greyed-out avatar/name and `"Former member"` badge.
 
 ---
 
