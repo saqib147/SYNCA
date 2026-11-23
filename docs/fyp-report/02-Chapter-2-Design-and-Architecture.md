@@ -327,45 +327,50 @@ classDiagram
 Synca defines three human actor roles scoped per project (`Admin`, `Moderator`, `Member`), plus an automated system actor (`File Cleanup Scheduler`) that enforces 24-hour file retention.
 
 ```mermaid
-flowchart LR
-    Member(["Project Member"])
-    Mod(["Project Moderator"])
-    Admin(["Project Admin"])
-    Scheduler(["File Cleanup Job\n(15-min Cron)"])
-
-    subgraph SyncaSystem["Synca Collaboration Platform"]
-        UC1(("Authenticate via Clerk"))
-        UC2(("View Dashboard & KPIs"))
-        UC3(("Create / Join Project\nvia Join Code"))
-        UC4(("Manage Tasks, Subtasks\n& Comments"))
-        UC5(("Reorder / Rename\nBoard Columns"))
-        UC6(("Send Channel & DM\nFormatted Messages"))
-        UC7(("Upload & Preview\n25 MB Files"))
-        UC8(("Delete Own DM\nConversation"))
-        UC9(("Edit Goals, Milestones\n& Invite Members"))
-        UC10(("Moderate Channel\nMessages"))
-        UC11(("Manage Roles & Reset\nJoin Code"))
-        UC12(("Remove Members /\nDelete Project"))
-        UC13(("Sweep Expired 24h\nCloudinary Files"))
+flowchart TB
+    subgraph Actors["System Actors"]
+        direction LR
+        Member(["Project Member"])
+        Mod(["Project Moderator"])
+        Admin(["Project Admin"])
+        Scheduler(["File Cleanup Cron\n(Every 15 min)"])
+        Admin -. "inherits" .-> Mod
+        Mod -. "inherits" .-> Member
     end
 
-    Member --> UC1
-    Member --> UC2
-    Member --> UC3
-    Member --> UC4
-    Member --> UC5
+    subgraph CoreUC["Core Collaboration (All Members)"]
+        direction LR
+        UC1["Authenticate via Clerk"]
+        UC2["Dashboard & KPIs"]
+        UC3["Create / Join Project\n(6-char Join Code)"]
+        UC4["Tasks, Subtasks\n& Comments"]
+        UC5["Reorder / Rename\nBoard Columns"]
+    end
+
+    subgraph ChatUC["Messaging & Ephemeral Files"]
+        direction LR
+        UC6["Channel & 1:1 DM\nFormatted Chat"]
+        UC7["Upload 25 MB Files\n(24h Expiry)"]
+        UC8["Delete Own DM\nConversation"]
+        UC13["Auto-Sweep Expired\nCloudinary Files"]
+    end
+
+    subgraph GovUC["Project Governance (Moderator / Admin)"]
+        direction LR
+        UC9["Edit Goals, Milestones\n& Invite Members"]
+        UC10["Moderate Channel\nMessages"]
+        UC11["Manage Roles &\nReset Join Code"]
+        UC12["Remove Members &\nDelete Project"]
+    end
+
+    Member --> CoreUC
     Member --> UC6
     Member --> UC7
     Member --> UC8
-
-    Mod -. "inherits" .-> Member
     Mod --> UC9
     Mod --> UC10
-
-    Admin -. "inherits" .-> Mod
     Admin --> UC11
     Admin --> UC12
-
     Scheduler --> UC13
 ```
 *Figure 2.4: UML Use Case Diagram — Actors and System Capabilities*
@@ -431,23 +436,23 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    actor Sender as Sender Browser (Next.js)
-    participant API as Express / Socket.io Server
-    participant Redis as Upstash Redis Pub/Sub
+    actor Sender as Sender Browser
+    participant API as Express / Socket.io
+    participant Redis as Upstash Redis
     participant Mongo as MongoDB Atlas
-    actor Receiver as Receiver Browser (Next.js)
+    actor Receiver as Receiver Browser
 
-    Sender->>Sender: Render optimistic message ("sending...")\n& update Sidebar preview via upsertDmPeerLocally()
-    Sender->>API: emit("message:send", { channelType, channelId, content, attachments })
-    API->>API: Verify socket.data.userId & channel/DM membership
-    API->>Mongo: Message.create({ senderId, plainText, attachments, ... })
-    Mongo-->>API: Persisted Message document (_id, createdAt)
-    API->>Redis: Publish "message:new" to room (project:id or dm:pair)
-    Redis-->>API: Fan-out across server instances
-    API-->>Sender: emit("message:new", message)
-    API-->>Receiver: emit("message:new", message)
-    Sender->>Sender: Replace optimistic bubble with persisted message
-    Receiver->>Receiver: Append bubble & increment unread / show toast
+    Sender->>Sender: Optimistic bubble + Sidebar update
+    Sender->>API: emit("message:send", payload)
+    API->>API: Verify JWT & room membership
+    API->>Mongo: Message.create(doc)
+    Mongo-->>API: Persisted Message (_id)
+    API->>Redis: Publish "message:new"
+    Redis-->>API: Fan-out to instances
+    API-->>Sender: emit("message:new", msg)
+    API-->>Receiver: emit("message:new", msg)
+    Sender->>Sender: Reconcile optimistic bubble
+    Receiver->>Receiver: Append bubble + unread toast
 ```
 *Figure 2.7: UML Sequence Diagram — Real-Time Messaging via Socket.io & Redis*
 
@@ -455,21 +460,21 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor Admin as Project Admin (Browser)
-    participant API as Express Controller (project.controller.ts)
+    actor Admin as Project Admin
+    participant API as Project Controller
     participant Mongo as MongoDB Atlas
     participant Socket as Socket.io Server
-    actor ExMember as Former Member (Browser)
+    actor ExMember as Former Member
 
-    Admin->>API: DELETE /api/v1/projects/:id/members/:targetUserId
-    API->>Mongo: Fetch Project & verify Admin role + Sole-Admin guard
-    API->>Mongo: Pull targetUserId from project.members & project.teamMembers
-    API->>Mongo: Task.updateMany({ projectId, assignees: targetUserId }, { $pull: { assignees: targetUserId } })
-    Mongo-->>API: Updated Project & Unassigned Tasks count
-    API->>Socket: Revoke targetUserId sockets from room "project:<id>"
+    Admin->>API: DELETE /projects/:id/members/:userId
+    API->>Mongo: Verify Admin + Sole-Admin guard
+    API->>Mongo: Pull userId from project.members
+    API->>Mongo: Task.updateMany($pull assignees)
+    Mongo-->>API: Updated Project & Tasks
+    API->>Socket: Revoke user from project room
     API-->>Admin: 200 OK { project }
-    Admin->>Admin: Refresh Team Roster & grey out ex-member in Conversation ("Former member")
-    Socket-->>ExMember: No longer receives project:<id> real-time events
+    Admin->>Admin: Show "Former member" in chat
+    Socket-->>ExMember: Room access revoked
 ```
 *Figure 2.8: UML Sequence Diagram — Member Removal & Automatic Task Unassignment*
 
