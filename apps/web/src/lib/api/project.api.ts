@@ -1,7 +1,6 @@
 import { Project } from '@synca/types';
 import { CreateProjectInput, UpdateProjectInput } from '@synca/zod-schemas';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { API_BASE_URL } from '@/lib/env';
 
 class ApiError extends Error {
   code: string;

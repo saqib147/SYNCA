@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '@clerk/nextjs';
 import { Message, Reaction } from '@synca/types';
+import { SOCKET_URL } from '@/lib/env';
 
 interface PresenceData {
   userId: string;
@@ -24,8 +25,6 @@ const SocketContext = createContext<SocketContextValue>({
 });
 
 export const useSocket = () => useContext(SocketContext);
-
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();

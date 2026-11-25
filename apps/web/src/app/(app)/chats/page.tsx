@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth, useUser } from '@clerk/nextjs';
+import { API_BASE_URL } from '@/lib/env';
 import {
   MessageSquare,
   Loader2,
@@ -255,7 +256,7 @@ function DirectChatView({
       try {
         const token = await getToken();
         const res = await window.fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/v1/users/${peerId}/profile`,
+          `${API_BASE_URL}/api/v1/users/${peerId}/profile`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (res.ok) {
@@ -500,10 +501,8 @@ function EmailLookupView({ email }: { email: string }) {
     (async () => {
       try {
         const token = await getToken();
-        const apiBase =
-          process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
         const res = await window.fetch(
-          `${apiBase}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
+          `${API_BASE_URL}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const body = await res.json().catch(() => ({}));

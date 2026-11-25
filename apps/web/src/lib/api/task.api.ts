@@ -1,7 +1,6 @@
 import { Task } from '@synca/types';
 import { CreateTaskInput, UpdateTaskInput, MoveTaskInput } from '@synca/zod-schemas';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+import { API_BASE_URL } from '@/lib/env';
 
 class ApiError extends Error {
   code: string;

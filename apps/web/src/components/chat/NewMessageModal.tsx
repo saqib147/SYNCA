@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
+import { API_BASE_URL } from '@/lib/env';
 import { useTeammates, Teammate, upsertDmPeerLocally } from '@/hooks/useTeammates';
 import { useSocket } from '@/context/SocketContext';
 import { cn } from '@/lib/utils';
@@ -126,9 +127,8 @@ export function NewMessageModal({ isOpen, onClose }: NewMessageModalProps) {
       setLookupResult(null);
 
       const token = await getToken();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       const res = await window.fetch(
-        `${apiBase}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
+        `${API_BASE_URL}/api/v1/users/lookup?email=${encodeURIComponent(email)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const body = await res.json().catch(() => ({}));

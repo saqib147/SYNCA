@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { API_BASE_URL as API_BASE } from '@/lib/env';
 
 export interface Teammate {
   userId: string;
@@ -16,7 +17,6 @@ export const notifyDmUpdated = () => {
   }
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const HIDDEN_KEY_PREFIX = 'synca:hidden-dms:';
 
 function readHiddenDms(userId?: string | null): Record<string, number> {

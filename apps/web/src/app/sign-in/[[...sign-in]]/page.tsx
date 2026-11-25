@@ -4,6 +4,7 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#000000] p-4">
       <SignIn
+        fallbackRedirectUrl="/dashboard"
         appearance={{
           variables: {
             colorPrimary: '#66deb4',

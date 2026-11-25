@@ -14,6 +14,7 @@ import {
   List,
 } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
+import { API_BASE_URL } from '@/lib/env';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
@@ -124,8 +125,7 @@ export function ChatInput({
         formData.append('projectId', projectId);
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      const res = await fetch(`${API_URL}/api/v1/files/upload`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/files/upload`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
