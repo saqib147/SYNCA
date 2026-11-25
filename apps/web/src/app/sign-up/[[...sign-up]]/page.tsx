@@ -1,6 +1,37 @@
-import { SignUp } from '@clerk/nextjs';
+'use client';
+
+import { useEffect } from 'react';
+import { SignUp, useAuth } from '@clerk/nextjs';
+import { Loader2 } from 'lucide-react';
 
 export default function SignUpPage() {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      window.location.replace('/dashboard');
+    }
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded || isSignedIn) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#000000] p-4 text-zinc-300">
+        <Loader2 className="h-7 w-7 animate-spin text-[#66deb4]" />
+        <p className="text-sm">
+          {isSignedIn ? 'Already signed in — redirecting to Dashboard…' : 'Loading authentication…'}
+        </p>
+        {isSignedIn && (
+          <a
+            href="/dashboard"
+            className="mt-2 rounded-lg bg-[#006c52] px-4 py-2 text-xs font-semibold text-white hover:bg-[#005742] transition-colors"
+          >
+            Continue to Dashboard
+          </a>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#000000] p-4">
       <SignUp

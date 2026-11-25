@@ -1,6 +1,48 @@
-import { SignIn } from '@clerk/nextjs';
+'use client';
+
+import { useEffect } from 'react';
+import { SignIn, useAuth, useClerk } from '@clerk/nextjs';
+import { Loader2 } from 'lucide-react';
 
 export default function SignInPage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      // Full navigation ensures Next.js middleware receives the freshly synced __session cookie
+      window.location.replace('/dashboard');
+    }
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded || isSignedIn) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#000000] p-4 text-zinc-300">
+        <Loader2 className="h-7 w-7 animate-spin text-[#66deb4]" />
+        <p className="text-sm">
+          {isSignedIn ? 'Already signed in — redirecting to Dashboard…' : 'Loading authentication…'}
+        </p>
+        {isSignedIn && (
+          <div className="mt-2 flex items-center gap-3">
+            <a
+              href="/dashboard"
+              className="rounded-lg bg-[#006c52] px-4 py-2 text-xs font-semibold text-white hover:bg-[#005742] transition-colors"
+            >
+              Continue to Dashboard
+            </a>
+            <button
+              type="button"
+              onClick={() => signOut({ redirectUrl: '/sign-in' })}
+              className="rounded-lg border border-white/15 px-3.5 py-2 text-xs font-medium text-zinc-300 hover:bg-white/10 transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#000000] p-4">
       <SignIn
