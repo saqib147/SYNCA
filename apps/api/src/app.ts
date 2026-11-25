@@ -12,11 +12,34 @@ import taskRouter from './routes/task.routes.js';
 import messageRouter from './routes/message.routes.js';
 import userRouter from './routes/user.routes.js';
 
+export const getAllowedOrigins = (): string[] => {
+  const raw = process.env.CLIENT_URL || 'http://localhost:3000';
+  return raw
+    .split(',')
+    .map((u) => u.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+};
+
 export const createApp = () => {
   const app = express();
+  const allowedOrigins = getAllowedOrigins();
 
+  app.set('trust proxy', 1);
   app.use(helmet());
-  app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:3000', credentials: true }));
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow server-to-server / health probes with no Origin header
+        if (!origin) return callback(null, true);
+        const normalized = origin.replace(/\/+$/, '');
+        if (allowedOrigins.includes(normalized)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json());
   app.use(
     clerkMiddleware({
@@ -46,10 +69,16 @@ export const createApp = () => {
       }
     }
 
-    const isHealthy = dbStatus === 'connected' && redisStatus === 'connected';
+    const isHealthy = dbStatus === 'connected';
+    const overallStatus =
+      dbStatus === 'connected' && redisStatus === 'connected'
+        ? 'healthy'
+        : isHealthy
+          ? 'degraded'
+          : 'unhealthy';
 
     res.status(isHealthy ? 200 : 503).json({
-      status: isHealthy ? 'healthy' : 'unhealthy',
+      status: overallStatus,
       timestamp: new Date().toISOString(),
       service: 'synca-api',
       uptime: process.uptime(),
