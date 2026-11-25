@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm ci && npx turbo run build --filter=api...
+    buildCommand: npm ci --include=dev && npx turbo run build --filter=api...
     startCommand: npm run start --workspace=api
     healthCheckPath: /health
     envVars:
