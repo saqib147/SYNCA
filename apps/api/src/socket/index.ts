@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient, RedisClientType } from 'redis';
 import { Express } from 'express';
-import { getAllowedOrigins } from '../app.js';
+import { isOriginAllowed } from '../app.js';
 import { socketAuthMiddleware } from './socketAuth.js';
 import { registerSocketHandlers } from './handlers.js';
 
@@ -55,10 +55,14 @@ export async function closeSocketServer() {
 }
 
 export async function createSocketServer(httpServer: http.Server, _app: Express) {
-  const allowedOrigins = getAllowedOrigins();
   const io = new Server(httpServer, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+      },
       credentials: true,
       methods: ['GET', 'POST'],
     },

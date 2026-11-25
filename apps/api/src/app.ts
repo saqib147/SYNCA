@@ -20,24 +20,40 @@ export const getAllowedOrigins = (): string[] => {
     .filter(Boolean);
 };
 
+export const isOriginAllowed = (origin?: string): boolean => {
+  // Allow server-to-server / health probes with no Origin header
+  if (!origin) return true;
+  const normalized = origin.replace(/\/+$/, '');
+  const allowed = getAllowedOrigins();
+  if (allowed.includes(normalized) || allowed.includes('*')) return true;
+  // Allow localhost in dev and Vercel production/preview deployments
+  if (normalized === 'http://localhost:3000' || /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(normalized)) {
+    return true;
+  }
+  return false;
+};
+
 export const createApp = () => {
   const app = express();
-  const allowedOrigins = getAllowedOrigins();
+
+  const corsOptions: cors.CorsOptions = {
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  };
 
   app.set('trust proxy', 1);
-  app.use(helmet());
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
   app.use(
-    cors({
-      origin: (origin, callback) => {
-        // Allow server-to-server / health probes with no Origin header
-        if (!origin) return callback(null, true);
-        const normalized = origin.replace(/\/+$/, '');
-        if (allowedOrigins.includes(normalized)) {
-          return callback(null, true);
-        }
-        return callback(new Error(`CORS blocked for origin: ${origin}`));
-      },
-      credentials: true,
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     })
   );
   app.use(express.json());
