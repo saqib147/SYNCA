@@ -99,7 +99,7 @@ function getStatusPillStyle(status: string) {
   }
 }
 
-function SortableTaskCard({
+const SortableTaskCard = React.memo(function SortableTaskCard({
   task,
   members,
   canManage,
@@ -306,7 +306,7 @@ function SortableTaskCard({
       </div>
     </div>
   );
-}
+});
 
 function SortableKanbanColumn({
   title,
@@ -669,6 +669,27 @@ export function ProjectKanbanBoard({
     await onColumnsChange(columns.filter((c) => c !== colName));
   };
 
+  // Pre-group and sort tasks by column in a single pass instead of filtering per column on every render
+  const tasksByColumn = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const col of columns) {
+      map.set(col, []);
+    }
+    for (const t of tasks) {
+      const col = t.column || 'Default Column';
+      const bucket = map.get(col);
+      if (bucket) {
+        bucket.push(t);
+      } else {
+        map.set(col, [t]);
+      }
+    }
+    map.forEach((list) => {
+      list.sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
+    return map;
+  }, [columns, tasks]);
+
   // Empty board state when no columns exist yet
   if (columns.length === 0 && !isAddingColumn) {
     return (
@@ -714,9 +735,7 @@ export function ProjectKanbanBoard({
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-4 flex-1 min-h-0 h-full overflow-x-auto overflow-y-hidden pb-2 pt-1 items-start scrollbar-thin">
           {columns.map((col) => {
-            const columnTasks = tasks
-              .filter((t) => (t.column || 'Default Column') === col)
-              .sort((a, b) => (a.order || 0) - (b.order || 0));
+            const columnTasks = tasksByColumn.get(col) || [];
 
             return (
               <SortableKanbanColumn

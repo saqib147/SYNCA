@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@synca/types', '@synca/zod-schemas', '@synca/config'],
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@dnd-kit/core', '@dnd-kit/sortable'],
+  },
   images: {
     remotePatterns: [
       {

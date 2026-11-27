@@ -46,6 +46,7 @@ export const createApp = () => {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400,
   };
 
   app.set('trust proxy', 1);
@@ -56,34 +57,12 @@ export const createApp = () => {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     })
   );
-  app.use(express.json());
-  app.use(
-    clerkMiddleware({
-      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-      secretKey: process.env.CLERK_SECRET_KEY,
-    })
-  );
 
-  // Register API routers
-  app.use('/api/v1/files', fileRouter);
-  app.use('/api/v1/projects', projectRouter);
-  app.use('/api/v1/tasks', taskRouter);
-  app.use('/api/v1/messages', messageRouter);
-  app.use('/api/v1/users', userRouter);
-
-  app.get('/health', async (_req, res) => {
+  // Fast health probe (registered before clerkMiddleware so Render/keep-alive pings skip auth & extra RTTs)
+  app.get('/health', (_req, res) => {
     const dbState = mongoose.connection.readyState;
     const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
-
-    let redisStatus = 'disconnected';
-    if (redisClient.isOpen) {
-      try {
-        await redisClient.ping();
-        redisStatus = 'connected';
-      } catch (err) {
-        console.error('[HealthCheck] Redis ping failed:', err);
-      }
-    }
+    const redisStatus = redisClient.isReady ? 'connected' : redisClient.isOpen ? 'connecting' : 'disconnected';
 
     const isHealthy = dbStatus === 'connected';
     const overallStatus =
@@ -104,6 +83,21 @@ export const createApp = () => {
       },
     });
   });
+
+  app.use(express.json());
+  app.use(
+    clerkMiddleware({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    })
+  );
+
+  // Register API routers
+  app.use('/api/v1/files', fileRouter);
+  app.use('/api/v1/projects', projectRouter);
+  app.use('/api/v1/tasks', taskRouter);
+  app.use('/api/v1/messages', messageRouter);
+  app.use('/api/v1/users', userRouter);
 
   // Global error handler (handles Multer errors & unexpected exceptions cleanly as JSON)
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

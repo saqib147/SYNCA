@@ -491,19 +491,25 @@ function SidebarContent() {
         </div>
       </aside>
 
-      {/* Modals */}
-      <JoinProjectModal
-        isOpen={isJoinModalOpen}
-        onClose={() => setIsJoinModalOpen(false)}
-      />
-      <CreateProjectModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-      />
-      <NewMessageModal
-        isOpen={isNewMessageOpen}
-        onClose={() => setIsNewMessageOpen(false)}
-      />
+      {/* Modals — conditionally mounted so closed modals never fire background hooks */}
+      {isJoinModalOpen && (
+        <JoinProjectModal
+          isOpen={isJoinModalOpen}
+          onClose={() => setIsJoinModalOpen(false)}
+        />
+      )}
+      {isCreateModalOpen && (
+        <CreateProjectModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+        />
+      )}
+      {isNewMessageOpen && (
+        <NewMessageModal
+          isOpen={isNewMessageOpen}
+          onClose={() => setIsNewMessageOpen(false)}
+        />
+      )}
     </>
   );
 }

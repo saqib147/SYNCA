@@ -36,7 +36,7 @@ import {
   X,
 } from 'lucide-react';
 import { useTasks, notifyTasksChanged } from '@/hooks/useTasks';
-import { notifyProjectsChanged } from '@/hooks/useProjects';
+import { notifyProjectsChanged, getCachedProjectById } from '@/hooks/useProjects';
 import {
   fetchProjectById,
   updateProjectApi,
@@ -93,6 +93,9 @@ const STATUS_BADGE_MAP: Record<
   },
 };
 
+// Per-project detail cache so navigating back to a visited project renders in 0ms
+const projectDetailCache = new Map<string, EnrichedProject>();
+
 export default function ProjectDetailPage({
   params: routeParams,
 }: {
@@ -107,8 +110,15 @@ export default function ProjectDetailPage({
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const [project, setProject] = useState<EnrichedProject | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialSeed = useMemo(() => {
+    const cached = projectDetailCache.get(id);
+    if (cached) return cached;
+    const summary = getCachedProjectById(id);
+    return summary ? (summary as EnrichedProject) : null;
+  }, [id]);
+
+  const [project, setProject] = useState<EnrichedProject | null>(initialSeed);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !initialSeed);
   const [activeTab, setActiveTab] = useState<ProjectTab>(() => {
     if (
       tabParam &&
@@ -196,14 +206,18 @@ export default function ProjectDetailPage({
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadProject = async () => {
+  const loadProject = async (silent = false) => {
     try {
-      setIsLoading(true);
+      const hasCached = projectDetailCache.has(id) || Boolean(getCachedProjectById(id));
+      if (!silent && !hasCached) {
+        setIsLoading(true);
+      }
       const token = await getToken();
       if (!token) return;
 
       const fetched = await fetchProjectById(id, token);
       if (fetched) {
+        projectDetailCache.set(id, fetched);
         setProject(fetched);
         setSettingsName(fetched.name);
         setSettingsDesc(fetched.description || '');
@@ -218,9 +232,19 @@ export default function ProjectDetailPage({
   };
 
   useEffect(() => {
-    loadProject();
+    const cached = projectDetailCache.get(id) || (getCachedProjectById(id) as EnrichedProject | null);
+    if (cached) {
+      setProject(cached);
+      setSettingsName(cached.name);
+      setSettingsDesc(cached.description || '');
+      setSettingsStatus(cached.status);
+      setSettingsPrivacy(cached.privacy);
+      setIsLoading(false);
+    }
+    loadProject(Boolean(cached));
   }, [id, getToken]);
 
+  // Fetch tasks in parallel with project details using route `id` (eliminates sequential waterfall)
   const {
     tasks,
     setTasks,
@@ -229,7 +253,7 @@ export default function ProjectDetailPage({
     moveTask,
     deleteTask,
     refreshTasks,
-  } = useTasks(project?._id);
+  } = useTasks(id || project?._id);
 
   // Filtered tasks for Board & List tabs
   const filteredTasks = useMemo(() => {
@@ -527,24 +551,36 @@ export default function ProjectDetailPage({
 
   const handleSaveBrief = async () => {
     if (!project || !canManageSettings) return;
+    const trimmed = briefDraft.trim();
+    const previousDesc = project.description || '';
+
+    // Optimistic update for instant feedback
+    const optimisticProject = { ...project, description: trimmed };
+    projectDetailCache.set(id, optimisticProject);
+    setProject(optimisticProject);
+    setSettingsDesc(trimmed);
+    setIsEditingBrief(false);
+
     try {
       setIsSavingBrief(true);
       const token = await getToken();
       if (!token) return;
-      const trimmed = briefDraft.trim();
       const updated = await updateProjectApi(
         project._id,
         { description: trimmed },
         token
       );
-      setProject((prev) =>
-        prev ? { ...prev, ...updated, description: trimmed } : null
-      );
-      setSettingsDesc(trimmed);
-      setIsEditingBrief(false);
+      setProject((prev) => {
+        if (!prev) return null;
+        const next = { ...prev, ...updated, description: trimmed };
+        projectDetailCache.set(id, next);
+        return next;
+      });
       notifyProjectsChanged();
     } catch (err) {
       console.error('Failed to update brief:', err);
+      setProject((prev) => (prev ? { ...prev, description: previousDesc } : null));
+      setSettingsDesc(previousDesc);
     } finally {
       setIsSavingBrief(false);
     }
@@ -1984,51 +2020,60 @@ export default function ProjectDetailPage({
         )}
       </div>
 
-      {/* Modals */}
-      <TaskDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        task={selectedDetailTask}
-        projectName={project.name}
-        userProjectRole={currentUserRole}
-        members={teamRoster}
-        onEditTask={(taskToEdit) => {
-          setIsDetailModalOpen(false);
-          handleOpenEditTask(taskToEdit);
-        }}
-        onTaskUpdated={() => {
-          refreshTasks();
-        }}
-        onTaskDeleted={() => {
-          refreshTasks();
-        }}
-      />
+      {/* Modals — conditionally mounted for zero idle overhead */}
+      {isDetailModalOpen && (
+        <TaskDetailModal
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          task={selectedDetailTask}
+          projectName={project.name}
+          userProjectRole={currentUserRole}
+          members={teamRoster}
+          onEditTask={(taskToEdit) => {
+            setIsDetailModalOpen(false);
+            handleOpenEditTask(taskToEdit);
+          }}
+          onTaskUpdated={(updated) => {
+            setSelectedDetailTask(updated);
+            setTasks((prev) =>
+              prev.map((t) => (t._id === updated._id ? updated : t))
+            );
+          }}
+          onTaskDeleted={(deletedId) => {
+            setSelectedDetailTask(null);
+            setTasks((prev) => prev.filter((t) => t._id !== deletedId));
+          }}
+        />
+      )}
 
-      <TaskModal
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        onSave={handleSaveTask}
-        task={editingTask}
-        defaultStatus="To Do"
-        defaultColumn={defaultTaskColumn}
-        columns={boardColumns}
-        projectId={project._id}
-        members={teamRoster}
-      />
+      {isTaskModalOpen && (
+        <TaskModal
+          isOpen={isTaskModalOpen}
+          onClose={() => setIsTaskModalOpen(false)}
+          onSave={handleSaveTask}
+          task={editingTask}
+          defaultStatus="To Do"
+          defaultColumn={defaultTaskColumn}
+          columns={boardColumns}
+          projectId={project._id}
+          members={teamRoster}
+        />
+      )}
 
-      <EditTeamModal
-        isOpen={isEditTeamModalOpen}
-        onClose={() => setIsEditTeamModalOpen(false)}
-        projectId={project._id}
-        projectName={project.name}
-        isAdmin={isAdmin}
-        canInvite={canManageSettings}
-        teamMemberProfiles={teamRoster}
-        onTeamUpdated={() => {
-          loadProject();
-          refreshTasks();
-        }}
-      />
+      {isEditTeamModalOpen && (
+        <EditTeamModal
+          isOpen={isEditTeamModalOpen}
+          onClose={() => setIsEditTeamModalOpen(false)}
+          projectId={project._id}
+          projectName={project.name}
+          isAdmin={isAdmin}
+          canInvite={canManageSettings}
+          teamMemberProfiles={teamRoster}
+          onTeamUpdated={() => {
+            loadProject(true);
+          }}
+        />
+      )}
     </div>
   );
 }

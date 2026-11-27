@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '@clerk/nextjs';
 import { Message, Reaction } from '@synca/types';
@@ -125,8 +125,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isLoaded, isSignedIn, getToken]);
 
+  const contextValue = useMemo(
+    () => ({ socket, isConnected, onlineUsers }),
+    [socket, isConnected, onlineUsers]
+  );
+
   return (
-    <SocketContext.Provider value={{ socket, isConnected, onlineUsers }}>
+    <SocketContext.Provider value={contextValue}>
       {children}
     </SocketContext.Provider>
   );

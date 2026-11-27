@@ -130,7 +130,7 @@ function renderFormattedText(text: string, isOwnDm = false): React.ReactNode {
   });
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message,
   isOwn,
   senderName,
@@ -565,3 +565,5 @@ export function MessageBubble({
     </div>
   );
 }
+
+export const MessageBubble = React.memo(MessageBubbleInner);

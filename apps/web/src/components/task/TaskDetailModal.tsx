@@ -94,17 +94,25 @@ export function TaskDetailModal({
 
   const handleStatusChange = async (newStatus: string) => {
     if (!task || isUpdatingStatus) return;
+    const previousTask = task;
+    const optimisticTask: Task = { ...task, status: newStatus };
+
+    // Optimistic update for instant toggle response
+    setTask(optimisticTask);
+    onTaskUpdated?.(optimisticTask);
+
     try {
       setIsUpdatingStatus(true);
       setError(null);
       const token = await getToken();
-      if (!token) return;
+      if (!token) throw new Error('Session expired');
 
       const updated = await updateTaskApi(task._id, { status: newStatus }, token);
       setTask(updated);
       onTaskUpdated?.(updated);
-      window.dispatchEvent(new CustomEvent('synca:tasks-changed'));
     } catch (err: any) {
+      setTask(previousTask);
+      onTaskUpdated?.(previousTask);
       setError(err?.message || 'Failed to update task status');
     } finally {
       setIsUpdatingStatus(false);
@@ -113,13 +121,19 @@ export function TaskDetailModal({
 
   const handleToggleSubtask = async (subtaskIndex: number) => {
     if (!task || !task.subtasks) return;
+    const previousTask = task;
+    const updatedSubtasks = task.subtasks.map((st, idx) =>
+      idx === subtaskIndex ? { ...st, completed: !st.completed } : st
+    );
+    const optimisticTask: Task = { ...task, subtasks: updatedSubtasks };
+
+    // Optimistic update for instant checkbox toggle
+    setTask(optimisticTask);
+    onTaskUpdated?.(optimisticTask);
+
     try {
       const token = await getToken();
-      if (!token) return;
-
-      const updatedSubtasks = task.subtasks.map((st, idx) =>
-        idx === subtaskIndex ? { ...st, completed: !st.completed } : st
-      );
+      if (!token) throw new Error('Session expired');
 
       const updated = await updateTaskApi(
         task._id,
@@ -128,27 +142,49 @@ export function TaskDetailModal({
       );
       setTask(updated);
       onTaskUpdated?.(updated);
-      window.dispatchEvent(new CustomEvent('synca:tasks-changed'));
     } catch (err: any) {
+      setTask(previousTask);
+      onTaskUpdated?.(previousTask);
       setError(err?.message || 'Failed to update subtask');
     }
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentText.trim() || isSubmittingComment || !task) return;
+    const trimmed = commentText.trim();
+    if (!trimmed || isSubmittingComment || !task) return;
+
+    const previousTask = task;
+    const optimisticComment = {
+      userId: user?.id || 'me',
+      userName: user?.fullName || user?.firstName || 'You',
+      userAvatar: user?.imageUrl || '',
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+    };
+    const optimisticTask: Task = {
+      ...task,
+      comments: [...(task.comments || []), optimisticComment],
+    };
+
+    // Optimistic comment append + clear input immediately
+    setTask(optimisticTask);
+    setCommentText('');
+    onTaskUpdated?.(optimisticTask);
 
     try {
       setIsSubmittingComment(true);
       setError(null);
       const token = await getToken();
-      if (!token) return;
+      if (!token) throw new Error('Session expired');
 
-      const updated = await addTaskCommentApi(task._id, commentText.trim(), token);
+      const updated = await addTaskCommentApi(task._id, trimmed, token);
       setTask(updated);
-      setCommentText('');
       onTaskUpdated?.(updated);
     } catch (err: any) {
+      setTask(previousTask);
+      setCommentText(trimmed);
+      onTaskUpdated?.(previousTask);
       setError(err?.message || 'Failed to post comment');
     } finally {
       setIsSubmittingComment(false);
@@ -169,7 +205,6 @@ export function TaskDetailModal({
 
       await deleteTaskApi(task._id, token);
       onTaskDeleted?.(task._id);
-      window.dispatchEvent(new CustomEvent('synca:tasks-changed'));
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Failed to delete task');

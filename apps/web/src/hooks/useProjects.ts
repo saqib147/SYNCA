@@ -16,6 +16,15 @@ import {
 // Shared in-memory cache for instant cross-component project synchronization (scoped to active userId)
 let globalProjectsCache: Project[] | null = null;
 let globalProjectsCacheUserId: string | null = null;
+let globalProjectsCacheAt = 0;
+let inFlightProjectsPromise: Promise<Project[]> | null = null;
+let inFlightProjectsUserId: string | null = null;
+const PROJECTS_TTL = 60 * 1000; // 60s fresh window to prevent mount request storms
+
+export const getCachedProjectById = (id: string): Project | null => {
+  if (!globalProjectsCache || !id) return null;
+  return globalProjectsCache.find((p) => String(p._id) === String(id)) || null;
+};
 
 export const notifyProjectsChanged = () => {
   if (typeof window !== 'undefined') {
@@ -58,12 +67,15 @@ export function useProjects() {
     [getToken]
   );
 
-  // Load projects user is a member of with SWR background revalidation
+  // Load projects user is a member of with in-flight deduplication & SWR TTL
   const loadProjects = useCallback(
-    async (filters?: ProjectFilters) => {
+    async (filters?: ProjectFilters, force = false) => {
       if (!isSignedIn || !userId) {
         globalProjectsCache = null;
         globalProjectsCacheUserId = null;
+        globalProjectsCacheAt = 0;
+        inFlightProjectsPromise = null;
+        inFlightProjectsUserId = null;
         setProjects([]);
         setIsLoading(false);
         return;
@@ -72,17 +84,36 @@ export function useProjects() {
       const hasFilters = Boolean(filters && (filters.status || filters.search));
       const hasValidCache = globalProjectsCache !== null && globalProjectsCacheUserId === userId;
 
+      if (!hasFilters && !force && hasValidCache && Date.now() - globalProjectsCacheAt < PROJECTS_TTL) {
+        setProjects(globalProjectsCache!);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         if (!hasValidCache || hasFilters) {
           setIsLoading(true);
         }
         setError(null);
-        const list = await withAuth((token) => fetchUserProjects(token, filters));
-        // Only update global cache for unfiltered full lists
+
+        let list: Project[];
         if (!hasFilters) {
+          if (!inFlightProjectsPromise || inFlightProjectsUserId !== userId || force) {
+            inFlightProjectsUserId = userId;
+            inFlightProjectsPromise = withAuth((token) => fetchUserProjects(token)).finally(() => {
+              if (inFlightProjectsUserId === userId) {
+                inFlightProjectsPromise = null;
+              }
+            });
+          }
+          list = await inFlightProjectsPromise;
           globalProjectsCache = list;
           globalProjectsCacheUserId = userId;
+          globalProjectsCacheAt = Date.now();
+        } else {
+          list = await withAuth((token) => fetchUserProjects(token, filters));
         }
+
         setProjects(list);
       } catch (err: any) {
         console.error('[useProjects] Failed to load projects:', err);
@@ -97,6 +128,7 @@ export function useProjects() {
   useEffect(() => {
     if (globalProjectsCache && globalProjectsCacheUserId === userId) {
       setProjects(globalProjectsCache);
+      setIsLoading(false);
     }
     loadProjects();
 
@@ -104,7 +136,7 @@ export function useProjects() {
       if (globalProjectsCache && globalProjectsCacheUserId === userId) {
         setProjects([...globalProjectsCache]);
       } else {
-        loadProjects();
+        loadProjects(undefined, true);
       }
     };
 
@@ -114,19 +146,21 @@ export function useProjects() {
     };
   }, [loadProjects, userId]);
 
-  // Create Project with optimistic instant cache update
+  // Create Project with instant cache update
   const createProject = useCallback(
     async (data: CreateProjectInput): Promise<Project> => {
       const created = await withAuth((token) => createProjectApi(data, token));
       globalProjectsCache = [created, ...(globalProjectsCache || [])];
+      globalProjectsCacheUserId = userId || null;
+      globalProjectsCacheAt = Date.now();
       setProjects(globalProjectsCache);
       notifyProjectsChanged();
       return created;
     },
-    [withAuth]
+    [withAuth, userId]
   );
 
-  // Join Project by 6-character Join Code with optimistic cache update
+  // Join Project by 6-character Join Code with instant cache update
   const joinProject = useCallback(
     async (joinCode: string): Promise<Project> => {
       const joined = await withAuth((token) => joinProjectApi(joinCode, token));
@@ -135,34 +169,61 @@ export function useProjects() {
         ? current.map((p) => (p._id === joined._id ? joined : p))
         : [joined, ...current];
       globalProjectsCache = updated;
+      globalProjectsCacheUserId = userId || null;
+      globalProjectsCacheAt = Date.now();
       setProjects(updated);
       notifyProjectsChanged();
       return joined;
     },
-    [withAuth]
+    [withAuth, userId]
   );
 
-  // Update Project with optimistic cache update
+  // Update Project with optimistic cache update & rollback
   const updateProject = useCallback(
     async (id: string, data: UpdateProjectInput): Promise<Project> => {
-      const updated = await withAuth((token) => updateProjectApi(id, data, token));
-      const current = globalProjectsCache || [];
-      globalProjectsCache = current.map((p) => (p._id === id ? updated : p));
-      setProjects(globalProjectsCache);
-      notifyProjectsChanged();
-      return updated;
+      const previous = globalProjectsCache ? [...globalProjectsCache] : [];
+      if (previous.length > 0) {
+        globalProjectsCache = previous.map((p) =>
+          p._id === id ? ({ ...p, ...data } as Project) : p
+        );
+        globalProjectsCacheAt = Date.now();
+        setProjects(globalProjectsCache);
+        notifyProjectsChanged();
+      }
+      try {
+        const updated = await withAuth((token) => updateProjectApi(id, data, token));
+        const current = globalProjectsCache || [];
+        globalProjectsCache = current.map((p) => (p._id === id ? updated : p));
+        globalProjectsCacheAt = Date.now();
+        setProjects(globalProjectsCache);
+        notifyProjectsChanged();
+        return updated;
+      } catch (err) {
+        globalProjectsCache = previous;
+        setProjects(previous);
+        notifyProjectsChanged();
+        throw err;
+      }
     },
     [withAuth]
   );
 
-  // Delete Project with optimistic cache update
+  // Delete Project with optimistic cache update & rollback
   const deleteProject = useCallback(
     async (id: string): Promise<void> => {
-      await withAuth((token) => deleteProjectApi(id, token));
-      const current = globalProjectsCache || [];
-      globalProjectsCache = current.filter((p) => p._id !== id);
+      const previous = globalProjectsCache ? [...globalProjectsCache] : [];
+      globalProjectsCache = previous.filter((p) => p._id !== id);
+      globalProjectsCacheAt = Date.now();
       setProjects(globalProjectsCache);
       notifyProjectsChanged();
+      try {
+        await withAuth((token) => deleteProjectApi(id, token));
+      } catch (err) {
+        globalProjectsCache = previous;
+        setProjects(previous);
+        notifyProjectsChanged();
+        throw err;
+      }
     },
     [withAuth]
   );

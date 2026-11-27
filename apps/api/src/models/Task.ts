@@ -86,8 +86,10 @@ const TaskSchema = new Schema<ITask>(
 );
 
 // Indexes for high-performance Kanban and Dashboard queries
+TaskSchema.index({ projectId: 1, deletedAt: 1, column: 1, order: -1 });
 TaskSchema.index({ projectId: 1, deletedAt: 1, status: 1, order: 1 });
 TaskSchema.index({ assignees: 1, deletedAt: 1 });
+TaskSchema.index({ createdBy: 1, deletedAt: 1 });
 TaskSchema.index({ createdBy: 1, isPrivate: 1, deletedAt: 1 });
 
 export const Task = mongoose.model<ITask>('Task', TaskSchema);

@@ -43,7 +43,9 @@ export function hideDmPeerLocally(userId: string | null | undefined, peerId: str
   const current = readHiddenDms(userId);
   current[peerId] = Date.now();
   writeHiddenDms(userId, current);
-  notifyDmUpdated();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('synca:dm-optimistic'));
+  }
 }
 
 export function upsertDmPeerLocally(
@@ -95,6 +97,8 @@ export function upsertDmPeerLocally(
 let cache: Teammate[] | null = null;
 let cacheUserId: string | null = null;
 let cacheAt = 0;
+let inFlightTeammatesPromise: Promise<Teammate[]> | null = null;
+let inFlightTeammatesUserId: string | null = null;
 const TTL = 5 * 60 * 1000; // 5 min
 
 export function useTeammates() {
@@ -113,6 +117,8 @@ export function useTeammates() {
         cache = null;
         cacheUserId = null;
         cacheAt = 0;
+        inFlightTeammatesPromise = null;
+        inFlightTeammatesUserId = null;
         setRawTeammates([]);
         setHiddenMap({});
         setIsLoading(false);
@@ -132,17 +138,30 @@ export function useTeammates() {
         if (!cache || cacheUserId !== userId) {
           setIsLoading(true);
         }
-        const token = await getToken();
-        if (!token) return;
-        const res = await window.fetch(`${API_BASE}/api/v1/users/teammates`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error('Failed to load teammates');
-        const body = await res.json();
-        const list: Teammate[] = body.data?.teammates || [];
-        cache = list;
-        cacheUserId = userId;
-        cacheAt = Date.now();
+
+        if (!inFlightTeammatesPromise || inFlightTeammatesUserId !== userId || force) {
+          inFlightTeammatesUserId = userId;
+          inFlightTeammatesPromise = (async () => {
+            const token = await getToken();
+            if (!token) return cache && cacheUserId === userId ? cache : [];
+            const res = await window.fetch(`${API_BASE}/api/v1/users/teammates`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('Failed to load teammates');
+            const body = await res.json();
+            const list: Teammate[] = body.data?.teammates || [];
+            cache = list;
+            cacheUserId = userId;
+            cacheAt = Date.now();
+            return list;
+          })().finally(() => {
+            if (inFlightTeammatesUserId === userId) {
+              inFlightTeammatesPromise = null;
+            }
+          });
+        }
+
+        const list = await inFlightTeammatesPromise;
         setRawTeammates(list);
       } catch (err) {
         console.error('[useTeammates]', err);
@@ -194,24 +213,42 @@ export function useTeammates() {
   const deleteConversation = useCallback(
     async (peerId: string): Promise<void> => {
       if (!userId) return;
-      const token = await getToken();
-      if (!token) throw new Error('Authentication required');
+      const previousCache = cache ? [...cache] : [];
+      const previousHidden = readHiddenDms(userId);
 
-      const res = await window.fetch(`${API_BASE}/api/v1/messages/dm/${encodeURIComponent(peerId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error?.message || 'Failed to delete conversation');
+      // Optimistically hide locally & remove from cache immediately
+      const nextHidden = { ...previousHidden, [peerId]: Date.now() };
+      writeHiddenDms(userId, nextHidden);
+      cache = previousCache.filter((t) => t.userId !== peerId);
+      setRawTeammates(cache);
+      setHiddenMap(nextHidden);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('synca:dm-optimistic'));
       }
 
-      // Immediately hide locally (handles shared-project teammates with 0 remaining messages) and invalidate cache
-      hideDmPeerLocally(userId, peerId);
-      cache = (cache || []).filter((t) => t.userId !== peerId);
-      setRawTeammates((prev) => prev.filter((t) => t.userId !== peerId));
-      setHiddenMap(readHiddenDms(userId));
-      notifyDmUpdated();
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Authentication required');
+
+        const res = await window.fetch(`${API_BASE}/api/v1/messages/dm/${encodeURIComponent(peerId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error?.message || 'Failed to delete conversation');
+        }
+      } catch (err) {
+        // Rollback on API failure
+        writeHiddenDms(userId, previousHidden);
+        cache = previousCache;
+        setRawTeammates(previousCache);
+        setHiddenMap(previousHidden);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('synca:dm-optimistic'));
+        }
+        throw err;
+      }
     },
     [getToken, userId]
   );

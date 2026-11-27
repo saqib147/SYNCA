@@ -13,7 +13,7 @@ import { Task } from '../models/Task.js';
 import { Message } from '../models/Message.js';
 import { generateJoinCode, slugify } from '../utils/project-helpers.js';
 import { evictUserFromProjectRoom, joinUserToProjectRoom } from '../socket/index.js';
-import { fetchUserProfile, lookupUserByExactEmail } from '../utils/clerk-profile.js';
+import { fetchUserProfile, fetchUserProfilesBatch, lookupUserByExactEmail } from '../utils/clerk-profile.js';
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -306,24 +306,25 @@ export async function getProjectById(req: Request, res: Response) {
 
     if (memberUserIds.length > 0) {
       try {
-        const clerkUsers = await clerkClient.users.getUserList({ userId: memberUserIds, limit: 50 });
+        const profilesMap = await fetchUserProfilesBatch(memberUserIds);
         const memberRoleMap = new Map<string, 'Admin' | 'Moderator' | 'Member'>();
         (project.members || []).forEach((m: any) => memberRoleMap.set(m.userId, m.role));
 
-        teamMemberProfiles = clerkUsers.data.map((u) => {
-          let derivedRole: 'Admin' | 'Moderator' | 'Member' = memberRoleMap.get(u.id) || 'Member';
-          if (u.id === project.ownerId) derivedRole = 'Admin';
+        teamMemberProfiles = memberUserIds.map((uid) => {
+          const p = profilesMap.get(uid);
+          let derivedRole: 'Admin' | 'Moderator' | 'Member' = memberRoleMap.get(uid) || 'Member';
+          if (uid === project.ownerId) derivedRole = 'Admin';
 
           return {
-            userId: u.id,
-            name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || 'Team Member',
-            email: u.emailAddresses?.[0]?.emailAddress,
-            imageUrl: u.imageUrl,
+            userId: uid,
+            name: p?.name || 'Team Member',
+            email: p?.email,
+            imageUrl: p?.avatar || '',
             projectRole: derivedRole,
           };
         });
       } catch (err) {
-        console.warn('[getProjectById] Failed to fetch team members from Clerk:', err);
+        console.warn('[getProjectById] Failed to fetch team members from profile cache:', err);
       }
     }
 

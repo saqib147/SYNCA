@@ -33,7 +33,9 @@ export function getProjectRole(project: any, userId: string): 'Admin' | 'Moderat
 
 export async function findActiveProject(projectId: string) {
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) return null;
-  return Project.findOne({ _id: projectId, deletedAt: null });
+  return Project.findOne({ _id: projectId, deletedAt: null })
+    .select('_id ownerId members teamMembers')
+    .lean();
 }
 
 /** Stable DM channel id: sorted Clerk userId pair. */

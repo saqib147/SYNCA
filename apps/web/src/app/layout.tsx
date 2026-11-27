@@ -1,7 +1,15 @@
 import type { Metadata } from 'next';
+import { DM_Sans } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ThemeProvider } from '@/context/ThemeContext';
 import './globals.css';
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-dm-sans',
+});
 
 export const metadata: Metadata = {
   title: 'Synca — Collaborative Workspace Platform',
@@ -20,8 +28,14 @@ export default function RootLayout({
       signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/dashboard"
     >
-      <html lang="en" suppressHydrationWarning>
+      <html lang="en" className={dmSans.variable} suppressHydrationWarning>
         <head>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&display=swap"
+            rel="stylesheet"
+          />
           <script
             dangerouslySetInnerHTML={{
               __html: `

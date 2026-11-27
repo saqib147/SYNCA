@@ -74,10 +74,13 @@ export function ChatInput({
   }, [showEmojiPicker]);
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
-    }
+    const el = textareaRef.current;
+    if (!el) return;
+    const rafId = window.requestAnimationFrame(() => {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    });
+    return () => window.cancelAnimationFrame(rafId);
   }, [text]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

@@ -1,5 +1,6 @@
 'use client';
 
+import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Task } from '@synca/types';
@@ -14,9 +15,14 @@ import {
   TaskFilters,
 } from '@/lib/api/task.api';
 
-export const notifyTasksChanged = () => {
+// Per-project in-memory task cache & in-flight deduplication
+const tasksCache = new Map<string, { tasks: Task[]; at: number }>();
+const inFlightTasks = new Map<string, Promise<Task[]>>();
+const TASKS_TTL = 30 * 1000;
+
+export const notifyTasksChanged = (projectId?: string) => {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('synca:tasks-changed'));
+    window.dispatchEvent(new CustomEvent('synca:tasks-changed', { detail: { projectId } }));
   }
 };
 
@@ -24,9 +30,27 @@ export function useTasks(projectId?: string) {
   const { getToken, isSignedIn } = useAuth();
   const { socket } = useSocket();
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [tasks, setTasksState] = useState<Task[]>(() =>
+    projectId && tasksCache.has(projectId) ? tasksCache.get(projectId)!.tasks : []
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => !(projectId && tasksCache.has(projectId))
+  );
   const [error, setError] = useState<string | null>(null);
+
+  // Helper to update both React state and per-project cache atomically
+  const setTasks = useCallback(
+    (updater: React.SetStateAction<Task[]>) => {
+      setTasksState((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (projectId) {
+          tasksCache.set(projectId, { tasks: next, at: Date.now() });
+        }
+        return next;
+      });
+    },
+    [projectId]
+  );
 
   // Authenticated executor with automatic 401 retry
   const withAuth = useCallback(
@@ -52,22 +76,46 @@ export function useTasks(projectId?: string) {
     [getToken]
   );
 
-  // Load tasks
+  // Load tasks with per-project cache & in-flight deduplication
   const loadTasks = useCallback(
-    async (filters?: TaskFilters) => {
+    async (filters?: TaskFilters, force = false) => {
       if (!isSignedIn || !projectId) {
-        setTasks([]);
+        setTasksState([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const hasFilters = Boolean(filters && Object.values(filters).some(Boolean));
+      const cached = tasksCache.get(projectId);
+
+      if (!hasFilters && !force && cached && Date.now() - cached.at < TASKS_TTL) {
+        setTasksState(cached.tasks);
         setIsLoading(false);
         return;
       }
 
       try {
-        setIsLoading(true);
+        if (!cached || hasFilters) {
+          setIsLoading(true);
+        }
         setError(null);
-        const list = await withAuth((token) =>
-          fetchProjectTasks(projectId, token, filters)
-        );
-        setTasks(list);
+
+        let list: Task[];
+        if (!hasFilters) {
+          let promise = !force ? inFlightTasks.get(projectId) : undefined;
+          if (!promise) {
+            promise = withAuth((token) => fetchProjectTasks(projectId, token)).finally(() => {
+              inFlightTasks.delete(projectId);
+            });
+            inFlightTasks.set(projectId, promise);
+          }
+          list = await promise;
+          tasksCache.set(projectId, { tasks: list, at: Date.now() });
+        } else {
+          list = await withAuth((token) => fetchProjectTasks(projectId, token, filters));
+        }
+
+        setTasksState(list);
       } catch (err: any) {
         console.error('[useTasks] Failed to load tasks:', err);
         setError(err.message || 'Failed to load tasks');
@@ -79,17 +127,27 @@ export function useTasks(projectId?: string) {
   );
 
   useEffect(() => {
-    loadTasks();
+    if (projectId && tasksCache.has(projectId)) {
+      setTasksState(tasksCache.get(projectId)!.tasks);
+      setIsLoading(false);
+    }
+    loadTasks(undefined, false);
 
-    const handleTasksChanged = () => {
-      loadTasks();
+    const handleTasksChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ projectId?: string }>).detail;
+      // If cache was already updated optimistically for this project, just sync state without a refetch storm
+      if (projectId && detail?.projectId === projectId && tasksCache.has(projectId)) {
+        setTasksState([...tasksCache.get(projectId)!.tasks]);
+        return;
+      }
+      loadTasks(undefined, true);
     };
 
     window.addEventListener('synca:tasks-changed', handleTasksChanged);
     return () => {
       window.removeEventListener('synca:tasks-changed', handleTasksChanged);
     };
-  }, [loadTasks]);
+  }, [loadTasks, projectId]);
 
   // Live Socket.io sync for Kanban moves, task edits, and comments from teammates
   useEffect(() => {
@@ -107,7 +165,7 @@ export function useTasks(projectId?: string) {
     return () => {
       socket.off('task:updated', handleTaskUpdated);
     };
-  }, [socket, projectId]);
+  }, [socket, projectId, setTasks]);
 
   // Create Task
   const createTask = useCallback(
@@ -118,28 +176,38 @@ export function useTasks(projectId?: string) {
       };
 
       const created = await withAuth((token) => createTaskApi(payload, token));
-      setTasks((prev) => [...prev, created]);
-      notifyTasksChanged();
+      setTasks((prev) => (prev.some((t) => t._id === created._id) ? prev : [...prev, created]));
+      notifyTasksChanged(projectId);
       return created;
     },
-    [projectId, withAuth]
+    [projectId, withAuth, setTasks]
   );
 
-  // Update Task
+  // Update Task (optimistic with rollback)
   const updateTask = useCallback(
     async (id: string, data: UpdateTaskInput): Promise<Task> => {
-      const updated = await withAuth((token) => updateTaskApi(id, data, token));
-      setTasks((prev) => prev.map((t) => (t._id === id ? updated : t)));
-      notifyTasksChanged();
-      return updated;
+      const previous = projectId && tasksCache.has(projectId) ? [...tasksCache.get(projectId)!.tasks] : tasks;
+      setTasks((prev) =>
+        prev.map((t) => (t._id === id ? ({ ...t, ...data } as Task) : t))
+      );
+
+      try {
+        const updated = await withAuth((token) => updateTaskApi(id, data, token));
+        setTasks((prev) => prev.map((t) => (t._id === id ? updated : t)));
+        notifyTasksChanged(projectId);
+        return updated;
+      } catch (err) {
+        setTasks(previous);
+        throw err;
+      }
     },
-    [withAuth]
+    [projectId, tasks, withAuth, setTasks]
   );
 
-  // Move Task between board columns (decoupled from status — never alters task.status)
+  // Move Task between board columns (optimistic, decoupled from status — never alters task.status)
   const moveTask = useCallback(
     async (id: string, newColumn: string, newOrder: number): Promise<void> => {
-      // Optimistic update
+      const previous = projectId && tasksCache.has(projectId) ? [...tasksCache.get(projectId)!.tasks] : tasks;
       setTasks((prev) =>
         prev.map((t) =>
           t._id === id ? { ...t, column: newColumn, order: newOrder } : t
@@ -150,27 +218,25 @@ export function useTasks(projectId?: string) {
         await withAuth((token) =>
           moveTaskApi(id, { newColumn, newOrder }, token)
         );
-        notifyTasksChanged();
       } catch (err) {
         console.error('[useTasks] Failed to sync moved task:', err);
-        // Revert on error
-        loadTasks();
+        setTasks(previous);
       }
     },
-    [withAuth, loadTasks]
+    [projectId, tasks, withAuth, setTasks]
   );
 
-  // Toggle Subtask Completion
+  // Toggle Subtask Completion (optimistic with rollback)
   const toggleSubtask = useCallback(
     async (taskId: string, subtaskIndex: number): Promise<void> => {
       const target = tasks.find((t) => t._id === taskId);
       if (!target || !target.subtasks || !target.subtasks[subtaskIndex]) return;
 
+      const previous = [...tasks];
       const updatedSubtasks = target.subtasks.map((st, idx) =>
         idx === subtaskIndex ? { ...st, completed: !st.completed } : st
       );
 
-      // Optimistic
       setTasks((prev) =>
         prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t))
       );
@@ -179,23 +245,29 @@ export function useTasks(projectId?: string) {
         await withAuth((token) =>
           updateTaskApi(taskId, { subtasks: updatedSubtasks }, token)
         );
-        notifyTasksChanged();
       } catch (err) {
         console.error('[useTasks] Failed to toggle subtask:', err);
-        loadTasks();
+        setTasks(previous);
       }
     },
-    [tasks, withAuth, loadTasks]
+    [tasks, withAuth, setTasks]
   );
 
-  // Delete Task
+  // Delete Task (optimistic with rollback)
   const deleteTask = useCallback(
     async (id: string): Promise<void> => {
-      await withAuth((token) => deleteTaskApi(id, token));
+      const previous = projectId && tasksCache.has(projectId) ? [...tasksCache.get(projectId)!.tasks] : tasks;
       setTasks((prev) => prev.filter((t) => t._id !== id));
-      notifyTasksChanged();
+
+      try {
+        await withAuth((token) => deleteTaskApi(id, token));
+        notifyTasksChanged(projectId);
+      } catch (err) {
+        setTasks(previous);
+        throw err;
+      }
     },
-    [withAuth]
+    [projectId, tasks, withAuth, setTasks]
   );
 
   return {

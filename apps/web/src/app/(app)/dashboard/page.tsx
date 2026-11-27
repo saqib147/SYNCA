@@ -31,6 +31,13 @@ const PROJECT_ICON_ACCENTS = [
   'bg-[#ffdad6] text-[#93000a] dark:bg-rose-500/15 dark:text-rose-300',
 ];
 
+// Module-level cache for Dashboard tasks to prevent empty-state flashes on revisit
+let myTasksCache: Task[] | null = null;
+let myTasksCacheUserId: string | null = null;
+let myTasksCacheAt = 0;
+let inFlightMyTasksPromise: Promise<Task[]> | null = null;
+const MY_TASKS_TTL = 30 * 1000;
+
 export default function DashboardPage() {
   const { user, isLoaded: isUserLoaded } = useUser();
   const { getToken, isSignedIn, isLoaded: isAuthLoaded, userId } = useAuth();
@@ -40,30 +47,65 @@ export default function DashboardPage() {
 
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Overdue' | 'Completed'>('Upcoming');
   const [greeting, setGreeting] = useState('Good Evening');
-  const [liveTasks, setLiveTasks] = useState<Task[]>([]);
+  const [liveTasks, setLiveTasks] = useState<Task[]>(() =>
+    myTasksCache && myTasksCacheUserId === userId ? myTasksCache : []
+  );
+  const [isTasksLoading, setIsTasksLoading] = useState<boolean>(
+    () => !(myTasksCache && myTasksCacheUserId === userId)
+  );
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isPrivateTaskModalOpen, setIsPrivateTaskModalOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
 
-  const loadTasks = useCallback(async () => {
-    if (!isSignedIn) return;
-    try {
-      let token = await getToken();
-      if (!token) token = await getToken({ skipCache: true });
-      if (!token) return;
-      const fetched = await fetchMyTasks(token);
-      setLiveTasks(fetched);
-    } catch (err) {
-      console.warn('[DashboardPage] Could not load live tasks:', err);
-    }
-  }, [getToken, isSignedIn]);
+  const loadTasks = useCallback(
+    async (force = false) => {
+      if (!isSignedIn || !userId) return;
+      if (
+        !force &&
+        myTasksCache &&
+        myTasksCacheUserId === userId &&
+        Date.now() - myTasksCacheAt < MY_TASKS_TTL
+      ) {
+        setLiveTasks(myTasksCache);
+        setIsTasksLoading(false);
+        return;
+      }
+
+      try {
+        if (!myTasksCache || myTasksCacheUserId !== userId) {
+          setIsTasksLoading(true);
+        }
+        if (!inFlightMyTasksPromise || force) {
+          inFlightMyTasksPromise = (async () => {
+            let token = await getToken();
+            if (!token) token = await getToken({ skipCache: true });
+            if (!token) return myTasksCache || [];
+            const fetched = await fetchMyTasks(token);
+            myTasksCache = fetched;
+            myTasksCacheUserId = userId;
+            myTasksCacheAt = Date.now();
+            return fetched;
+          })().finally(() => {
+            inFlightMyTasksPromise = null;
+          });
+        }
+        const fetched = await inFlightMyTasksPromise;
+        setLiveTasks(fetched);
+      } catch (err) {
+        console.warn('[DashboardPage] Could not load live tasks:', err);
+      } finally {
+        setIsTasksLoading(false);
+      }
+    },
+    [getToken, isSignedIn, userId]
+  );
 
   useEffect(() => {
     if (isAuthLoaded && isSignedIn) {
-      loadTasks();
+      loadTasks(false);
     }
-    const handleSync = () => loadTasks();
+    const handleSync = () => loadTasks(true);
     window.addEventListener('synca:projects-changed', handleSync);
     window.addEventListener('synca:tasks-changed', handleSync);
     return () => {
@@ -289,7 +331,16 @@ export default function DashboardPage() {
 
           {/* Task List */}
           <div className="space-y-3.5 pt-5 flex-1 overflow-y-auto pr-1 scrollbar-none">
-            {filteredTasks.length > 0 ? (
+            {isTasksLoading && liveTasks.length === 0 ? (
+              <div className="space-y-3.5">
+                {[0, 1, 2].map((idx) => (
+                  <div
+                    key={idx}
+                    className="h-[108px] rounded-[16px] bg-[#f3f4f6] dark:bg-white/[0.04] animate-pulse border border-[#e5e7eb] dark:border-white/[0.06]"
+                  />
+                ))}
+              </div>
+            ) : filteredTasks.length > 0 ? (
               filteredTasks.map((item) => (
                 <div
                   key={item.id}
@@ -576,61 +627,82 @@ export default function DashboardPage() {
       </div>
 
       {/* Task Detail Modal */}
-      <TaskDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        task={selectedTask}
-        projectName={
-          selectedTask?.projectId
-            ? projects.find((p) => String(p._id) === String(selectedTask.projectId))?.name ||
-            'Active Project'
-            : 'Personal Task'
-        }
-        userProjectRole={(() => {
-          if (!selectedTask?.projectId || !userId) return null;
-          const proj = projects.find((p) => String(p._id) === String(selectedTask.projectId));
-          if (!proj) return null;
-          if (proj.ownerId === userId) return 'Admin';
-          return (proj.members?.find((m) => m.userId === userId)?.role as any) || 'Member';
-        })()}
-        members={[
-          ...(userId
-            ? [{ userId, name: user?.fullName || firstName, imageUrl: user?.imageUrl }]
-            : []),
-          ...teammates.map((t) => ({
-            userId: t.userId,
-            name: t.name,
-            imageUrl: t.avatarUrl,
-          })),
-        ]}
-        onTaskUpdated={(updated) => {
-          setSelectedTask(updated);
-          loadTasks();
-        }}
-        onTaskDeleted={() => {
-          setSelectedTask(null);
-          loadTasks();
-        }}
-      />
+      {isDetailModalOpen && (
+        <TaskDetailModal
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          task={selectedTask}
+          projectName={
+            selectedTask?.projectId
+              ? projects.find((p) => String(p._id) === String(selectedTask.projectId))?.name ||
+              'Active Project'
+              : 'Personal Task'
+          }
+          userProjectRole={(() => {
+            if (!selectedTask?.projectId || !userId) return null;
+            const proj = projects.find((p) => String(p._id) === String(selectedTask.projectId));
+            if (!proj) return null;
+            if (proj.ownerId === userId) return 'Admin';
+            return (proj.members?.find((m) => m.userId === userId)?.role as any) || 'Member';
+          })()}
+          members={[
+            ...(userId
+              ? [{ userId, name: user?.fullName || firstName, imageUrl: user?.imageUrl }]
+              : []),
+            ...teammates.map((t) => ({
+              userId: t.userId,
+              name: t.name,
+              imageUrl: t.avatarUrl,
+            })),
+          ]}
+          onTaskUpdated={(updated) => {
+            setSelectedTask(updated);
+            setLiveTasks((prev) => {
+              const next = prev.map((t) => (t._id === updated._id ? updated : t));
+              myTasksCache = next;
+              myTasksCacheAt = Date.now();
+              return next;
+            });
+          }}
+          onTaskDeleted={(deletedId) => {
+            setSelectedTask(null);
+            setLiveTasks((prev) => {
+              const next = prev.filter((t) => t._id !== deletedId);
+              myTasksCache = next;
+              myTasksCacheAt = Date.now();
+              return next;
+            });
+          }}
+        />
+      )}
 
       {/* Personal Private Task Modal */}
-      <TaskModal
-        isOpen={isPrivateTaskModalOpen}
-        onClose={() => setIsPrivateTaskModalOpen(false)}
-        projectId={undefined}
-        onSave={async (data) => {
-          const token = await getToken();
-          if (!token) throw new Error('Session expired');
-          await createTaskApi({ ...data, projectId: null, isPrivate: true }, token);
-          await loadTasks();
-        }}
-      />
+      {isPrivateTaskModalOpen && (
+        <TaskModal
+          isOpen={isPrivateTaskModalOpen}
+          onClose={() => setIsPrivateTaskModalOpen(false)}
+          projectId={undefined}
+          onSave={async (data) => {
+            const token = await getToken();
+            if (!token) throw new Error('Session expired');
+            const created = await createTaskApi({ ...data, projectId: null, isPrivate: true }, token);
+            setLiveTasks((prev) => {
+              const next = [created, ...prev];
+              myTasksCache = next;
+              myTasksCacheAt = Date.now();
+              return next;
+            });
+          }}
+        />
+      )}
 
       {/* Create Project Modal (triggered by "New ↗" in Ongoing Projects) */}
-      <CreateProjectModal
-        isOpen={isCreateProjectOpen}
-        onClose={() => setIsCreateProjectOpen(false)}
-      />
+      {isCreateProjectOpen && (
+        <CreateProjectModal
+          isOpen={isCreateProjectOpen}
+          onClose={() => setIsCreateProjectOpen(false)}
+        />
+      )}
     </div>
   );
 }

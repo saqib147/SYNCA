@@ -29,17 +29,39 @@ export const getTeammates = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Auth required' } });
     }
 
-    // Find all projects the user belongs to
-    const projects = await Project.find({
-      deletedAt: null,
-      $or: [
-        { ownerId: currentUserId },
-        { 'members.userId': currentUserId },
-        { teamMembers: currentUserId },
-      ],
-    })
-      .select('ownerId members teamMembers name')
-      .lean();
+    // Parallelize project roster query + DM thread aggregation
+    const escapedUid = currentUserId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dmRegex = new RegExp(`(^${escapedUid}:|:${escapedUid}$)`);
+
+    const [projects, dmThreads] = await Promise.all([
+      Project.find({
+        deletedAt: null,
+        $or: [
+          { ownerId: currentUserId },
+          { 'members.userId': currentUserId },
+          { teamMembers: currentUserId },
+        ],
+      })
+        .select('ownerId members teamMembers name')
+        .lean(),
+      Message.aggregate([
+        {
+          $match: {
+            channelType: 'dm',
+            deletedAt: null,
+            channelId: { $regex: dmRegex },
+          },
+        },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: '$channelId',
+            lastMessageAt: { $first: '$createdAt' },
+            lastMessagePreview: { $first: '$plainText' },
+          },
+        },
+      ]),
+    ]);
 
     // Collect unique peer user IDs + deduplicated shared project names
     const peerMap = new Map<string, Set<string>>();
@@ -63,29 +85,6 @@ export const getTeammates = async (req: Request, res: Response) => {
         }
       }
     }
-
-    // Also aggregate existing DM threads so Tier 3 external DM peers appear in the sidebar
-    // and conversations are ordered by most recent activity (lastMessageAt descending)
-    const escapedUid = currentUserId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const dmRegex = new RegExp(`(^${escapedUid}:|:${escapedUid}$)`);
-
-    const dmThreads = await Message.aggregate([
-      {
-        $match: {
-          channelType: 'dm',
-          deletedAt: null,
-          channelId: { $regex: dmRegex },
-        },
-      },
-      { $sort: { createdAt: -1 } },
-      {
-        $group: {
-          _id: '$channelId',
-          lastMessageAt: { $first: '$createdAt' },
-          lastMessagePreview: { $first: '$plainText' },
-        },
-      },
-    ]);
 
     const dmMetaMap = new Map<string, { lastMessageAt: string; lastMessagePreview: string }>();
     for (const thread of dmThreads) {

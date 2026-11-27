@@ -48,7 +48,7 @@ const MessageSchema = new Schema<IMessage>(
   { timestamps: true }
 );
 
-MessageSchema.index({ channelType: 1, channelId: 1, deletedAt: 1, createdAt: -1 });
+MessageSchema.index({ channelType: 1, channelId: 1, deletedAt: 1, createdAt: -1, _id: -1 });
 MessageSchema.index({ projectId: 1, deletedAt: 1, createdAt: -1 });
 MessageSchema.index({ senderId: 1, createdAt: -1 });
 MessageSchema.index({ mentions: 1, createdAt: -1 });

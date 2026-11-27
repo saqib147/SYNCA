@@ -612,15 +612,19 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Modals */}
-      <CreateProjectModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-      />
-      <JoinProjectModal
-        isOpen={showJoinModal}
-        onClose={() => setShowJoinModal(false)}
-      />
+      {/* Modals — conditionally mounted so closed modals never fire background hooks */}
+      {showCreateModal && (
+        <CreateProjectModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
+      {showJoinModal && (
+        <JoinProjectModal
+          isOpen={showJoinModal}
+          onClose={() => setShowJoinModal(false)}
+        />
+      )}
     </div>
   );
 }

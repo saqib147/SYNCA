@@ -57,13 +57,13 @@ async function assertAccess(userId: string, channelType: 'dm' | 'channel', chann
     if (!project || !isProjectMember(project, userId)) {
       return { ok: false as const, message: 'Not a project member' };
     }
-    return { ok: true as const, projectId: String(project._id) };
+    return { ok: true as const, projectId: String(project._id), project };
   }
 
   if (!isDmParticipant(channelId, userId)) {
     return { ok: false as const, message: 'Not a DM participant' };
   }
-  return { ok: true as const, projectId: null };
+  return { ok: true as const, projectId: null, project: null };
 }
 
 function emitRoom(io: Server, channelType: 'dm' | 'channel', channelId: string, event: string, payload: unknown) {
@@ -203,21 +203,22 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         channelId = canonical;
       }
 
-      const access = await assertAccess(userId, channelType, channelId);
-      if (!access.ok) {
-        socket.emit('error', { code: 'FORBIDDEN', message: access.message });
-        ack?.({ ok: false, error: access.message });
-        return;
-      }
-
       if (content === undefined || content === null || content === '') {
         socket.emit('error', { code: 'VALIDATION_ERROR', message: 'Message content is required' });
         ack?.({ ok: false, error: 'Message content is required' });
         return;
       }
 
-      // Always resolve sender profile server-side to prevent spoofing
-      const profile = await fetchUserProfile(userId);
+      // Parallelize access verification and server-side profile resolution (eliminates sequential RTT)
+      const [access, profile] = await Promise.all([
+        assertAccess(userId, channelType, channelId),
+        fetchUserProfile(userId),
+      ]);
+      if (!access.ok) {
+        socket.emit('error', { code: 'FORBIDDEN', message: access.message });
+        ack?.({ ok: false, error: access.message });
+        return;
+      }
 
       const message = await Message.create({
         channelType,
@@ -237,7 +238,7 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
 
       if (channelType === 'channel') {
         let broadcastTarget = io.to(projectRoom(channelId));
-        const project = await findActiveProject(channelId);
+        const project = access.project;
         if (project) {
           const recipientIds = new Set<string>();
           if (project.ownerId) recipientIds.add(project.ownerId);
@@ -376,15 +377,15 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         const canonical = canonicalizeDmChannelId(userId, channelId);
         if (!canonical) return;
         channelId = canonical;
+      } else if (!joinedProjectIds.includes(channelId)) {
+        const access = await assertAccess(userId, channelType, channelId);
+        if (!access.ok) return;
       }
-      const access = await assertAccess(userId, channelType, channelId);
-      if (!access.ok) return;
 
       const key = typingKey(channelType, channelId);
-      if (redisClient.isOpen) {
-        await redisClient.sAdd(key, userId);
-        await redisClient.expire(key, 5);
-        const userIds = await redisClient.sMembers(key);
+      if (redisClient.isReady) {
+        const results = await redisClient.multi().sAdd(key, userId).expire(key, 5).sMembers(key).exec();
+        const userIds = Array.isArray(results?.[2]) ? (results[2] as string[]) : [userId];
         await emitTypingUpdate(channelType, channelId, userIds);
       } else {
         await emitTypingUpdate(channelType, channelId, [userId]);
@@ -404,14 +405,15 @@ export function registerSocketHandlers(io: Server, socket: Socket) {
         const canonical = canonicalizeDmChannelId(userId, channelId);
         if (!canonical) return;
         channelId = canonical;
+      } else if (!joinedProjectIds.includes(channelId)) {
+        const access = await assertAccess(userId, channelType, channelId);
+        if (!access.ok) return;
       }
-      const access = await assertAccess(userId, channelType, channelId);
-      if (!access.ok) return;
 
       const key = typingKey(channelType, channelId);
-      if (redisClient.isOpen) {
-        await redisClient.sRem(key, userId);
-        const userIds = await redisClient.sMembers(key);
+      if (redisClient.isReady) {
+        const results = await redisClient.multi().sRem(key, userId).sMembers(key).exec();
+        const userIds = Array.isArray(results?.[1]) ? (results[1] as string[]) : [];
         await emitTypingUpdate(channelType, channelId, userIds);
       } else {
         await emitTypingUpdate(channelType, channelId, []);

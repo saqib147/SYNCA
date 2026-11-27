@@ -37,8 +37,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 const startServer = async () => {
   try {
-    await connectMongoDB();
-    await connectRedis();
+    await Promise.all([connectMongoDB(), connectRedis()]);
     startFileCleanupJob();
 
     const httpServer = http.createServer(app);

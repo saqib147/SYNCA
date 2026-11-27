@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { Message } from '@synca/types';
@@ -149,7 +149,10 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
     return () => window.removeEventListener('focus', handleFocus);
   }, [markAsRead]);
 
-  const totalUnreadCount = Object.values(unreadCounts).reduce((acc, count) => acc + count, 0);
+  const totalUnreadCount = useMemo(
+    () => Object.values(unreadCounts).reduce((acc, count) => acc + count, 0),
+    [unreadCounts]
+  );
 
   // Synchronize browser tab title with unread count
   useEffect(() => {
@@ -246,16 +249,19 @@ export function ChatNotificationProvider({ children }: { children: React.ReactNo
     setToasts((prev) => prev.filter((t) => t.id !== toastId));
   };
 
+  const contextValue = useMemo(
+    () => ({
+      unreadCounts,
+      activeChatKey,
+      setActiveChatKey,
+      markAsRead,
+      totalUnreadCount,
+    }),
+    [unreadCounts, activeChatKey, markAsRead, totalUnreadCount]
+  );
+
   return (
-    <ChatNotificationContext.Provider
-      value={{
-        unreadCounts,
-        activeChatKey,
-        setActiveChatKey,
-        markAsRead,
-        totalUnreadCount,
-      }}
-    >
+    <ChatNotificationContext.Provider value={contextValue}>
       {children}
 
       {/* Floating Top-Right Toast Notifications */}
