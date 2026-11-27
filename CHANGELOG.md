@@ -5,6 +5,10 @@ All notable changes to the Synca project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Public Landing Page & Entry Flow] - 2026-11-27
+- Replaced the immediate `/dashboard` redirect in [`apps/web/src/app/page.tsx`](file:///d:/Synca-FYP/apps/web/src/app/page.tsx) with a branded Synca public landing page featuring Light/Dark mode parity, sticky navigation with dynamic `<SignedOut>` (`Sign In` / `Get Started`) and `<SignedIn>` (`Open Dashboard`) CTAs, an inline workspace preview, a 6-card feature showcase, and a 3-step onboarding walkthrough.
+- Updated [`apps/web/src/middleware.ts`](file:///d:/Synca-FYP/apps/web/src/middleware.ts) to make `/` publicly accessible while keeping `/dashboard`, `/projects`, `/chats`, and `/settings` protected and preserving the signed-in redirect guard on `/sign-in` and `/sign-up`.
+
 ## [Performance & UX Overhaul — Full-Stack Snappiness] - 2026-11-27
 ### Backend (`apps/api`)
 - **CORS & Health Probe**: Added `maxAge: 86400` to `corsOptions` in [`app.ts`](file:///d:/Synca-FYP/apps/api/src/app.ts) to cache cross-origin `OPTIONS` preflights for 24h; moved `/health` above `clerkMiddleware()` and switched to non-blocking `redisClient.isReady` status check.
